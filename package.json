@@ -1,0 +1,22 @@
+{
+  "name": "brisk",
+  "version": "1.0.0",
+  "description": "A websocket-based dice game.",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix ./backend run dev",
+    "dev:frontend": "npm --prefix ./frontend run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "npm --prefix ./backend run build",
+    "build:frontend": "npm --prefix ./frontend run build",
+    "start": "concurrently \"npm run start:backend\" \"npm run preview:frontend\"",
+    "start:backend": "npm --prefix ./backend run start",
+    "preview:frontend": "npm --prefix ./frontend run preview",
+    "install": "npm install --prefix ./backend && npm install --prefix ./frontend"
+  },
+  "dependencies": {
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

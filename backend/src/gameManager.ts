@@ -1,0 +1,436 @@
+import { v4 as uuidv4 } from 'uuid';
+import { GameState, Player, ChatMessage } from './types';
+import { Database } from './database';
+import { EventEmitter } from 'events';
+
+const ITALIAN_SOCCER_PLAYERS = [
+  'Rossi', 'Buffon', 'Totti', 'Baggio', 'Maldini', 'Pirlo', 'Del Piero',
+  'Cannavaro', 'Gattuso', 'Insigne', 'Immobile', 'Verratti', 'Donnarumma',
+  'Chiesa', 'Barella', 'Zaniolo', 'Pellegrini', 'Spinazzola', 'Chiellini',
+  'Bonucci', 'Bernardeschi', 'Belotti', 'Locatelli', 'Scamacca'
+];
+
+export class GameManager extends EventEmitter {
+  private games: Map<string, GameState> = new Map();
+  private playerSockets: Map<string, string> = new Map(); // playerId -> socketId
+  private socketPlayers: Map<string, string> = new Map(); // socketId -> playerId
+  private kickedPlayers: Map<string, Map<string, number>> = new Map(); // lobbyCode -> (playerId -> expiry timestamp)
+  private db: Database;
+
+  constructor(db: Database) {
+    super();
+    this.db = db;
+    this.loadGamesFromDB();
+  }
+
+  private async loadGamesFromDB(): Promise<void> {
+    // This would load existing games from database on server restart
+    // For now, we'll start fresh each time
+  }
+
+  generateRandomName(): string {
+    return ITALIAN_SOCCER_PLAYERS[Math.floor(Math.random() * ITALIAN_SOCCER_PLAYERS.length)];
+  }
+
+  generateLobbyCode(): string {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+
+  async createLobby(playerName: string, socketId: string): Promise<GameState> {
+    const gameId = uuidv4();
+    const lobbyCode = this.generateLobbyCode();
+    const playerId = uuidv4();
+
+    const host: Player = {
+      id: playerId,
+      name: playerName,
+      isHost: true,
+      isConnected: true,
+      isAI: false,
+      score: 0
+    };
+
+    const gameState: GameState = {
+      id: gameId,
+      lobbyCode,
+      players: [host],
+      currentPlayerIndex: 0,
+      gamePhase: 'lobby',
+      maxPlayers: 6,
+      pointsToWin: 10,
+      chat: [],
+      currentRound: 1
+    };
+
+    this.games.set(lobbyCode, gameState);
+    this.playerSockets.set(playerId, socketId);
+    this.socketPlayers.set(socketId, playerId);
+
+    await this.db.saveGame(gameState);
+    return gameState;
+  }
+
+  async joinLobby(lobbyCode: string, playerName: string, socketId: string): Promise<GameState> {
+    const gameState = this.games.get(lobbyCode) || await this.db.loadGame(lobbyCode);
+    
+    if (!gameState) {
+      throw new Error('Lobby not found');
+    }
+
+    // Prevent recently kicked players from rejoining
+    const kicked = this.kickedPlayers.get(lobbyCode);
+    if (kicked) {
+      // Clean up expired entries
+      const now = Date.now();
+      for (const [pid, expiry] of kicked.entries()) {
+        if (expiry < now) kicked.delete(pid);
+      }
+      for (const [pid, expiry] of kicked.entries()) {
+        if (playerName === '' || expiry < now) continue;
+        // Block by player name (since new uuid is generated on join)
+        if (pid === playerName) {
+          const remainingMs = expiry - now;
+          const err: any = new Error('You have been kicked. Please wait before rejoining.');
+          err.code = 'KICK_TIMEOUT';
+          err.remainingMs = remainingMs > 0 ? remainingMs : 0;
+          throw err;
+        }
+      }
+    }
+
+    if (gameState.players.length >= gameState.maxPlayers) {
+      throw new Error('Lobby is full');
+    }
+
+    if (gameState.gamePhase === 'playing') {
+      const player = gameState.players.find(p => p.name === playerName + 'bot' && p.isAI);
+      if (player) {
+        // Reconnect existing AI player
+        player.isConnected = true;
+        player.isAI = false;
+        player.name = player.name.replace('bot', '');
+        this.playerSockets.set(player.id, socketId);
+        this.socketPlayers.set(socketId, player.id);
+        this.games.set(lobbyCode, gameState);
+        await this.db.saveGame(gameState);
+        return gameState;
+      }
+      throw new Error('Game already started, cannot join now');
+    }
+
+    const playerId = uuidv4();
+    const newPlayer: Player = {
+      id: playerId,
+      name: playerName,
+      isHost: false,
+      isConnected: true,
+      isAI: false,
+      score: 0
+    };
+
+    gameState.players.push(newPlayer);
+    this.games.set(lobbyCode, gameState);
+    this.playerSockets.set(playerId, socketId);
+    this.socketPlayers.set(socketId, playerId);
+
+    await this.db.saveGame(gameState);
+    return gameState;
+  }
+
+  async reconnectPlayer(lobbyCode: string, playerId: string, socketId: string): Promise<GameState | null> {
+    const gameState = this.games.get(lobbyCode) || await this.db.loadGame(lobbyCode);
+    
+    if (!gameState) {
+      return null;
+    }
+
+    const player = gameState.players.find(p => p.id === playerId);
+    if (player) {
+      player.isConnected = true;
+      if (player.isAI && player.name.endsWith('bot')) {
+        player.isAI = false;
+        player.name = player.name.replace('bot', '');
+      }
+      
+      this.playerSockets.set(playerId, socketId);
+      this.socketPlayers.set(socketId, playerId);
+      this.games.set(lobbyCode, gameState);
+      
+      await this.db.saveGame(gameState);
+    }
+
+    return gameState;
+  }
+
+  async startGame(lobbyCode: string, playerId: string): Promise<GameState> {
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState) {
+      throw new Error('Lobby not found');
+    }
+
+    const player = gameState.players.find(p => p.id === playerId);
+    if (!player || !player.isHost) {
+      throw new Error('Only the host can start the game');
+    }
+
+    if (gameState.players.length < 2) {
+      throw new Error('Need at least 2 players to start');
+    }
+
+    gameState.gamePhase = 'playing';
+    gameState.currentPlayerIndex = 0;
+    gameState.currentRound = 1;
+
+    // Reset scores
+    gameState.players.forEach(p => {
+      p.score = 0;
+      p.lastRoll = undefined;
+    });
+
+    this.games.set(lobbyCode, gameState);
+    await this.db.saveGame(gameState);
+    return gameState;
+  }
+
+  async rollDice(lobbyCode: string, playerId: string): Promise<{ gameState: GameState; roll: number }> {
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState) {
+      throw new Error('Game not found');
+    }
+
+    if (gameState.gamePhase !== 'playing') {
+      throw new Error('Game is not in progress');
+    }
+
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    if (currentPlayer.id !== playerId && !currentPlayer.isAI) {
+      throw new Error('Not your turn');
+    }
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    currentPlayer.lastRoll = roll;
+
+    // Check if all players have rolled
+    const allRolled = gameState.players.every(p => p.lastRoll !== undefined);
+    
+    if (allRolled) {
+      // Find winner of this round
+      const maxRoll = Math.max(...gameState.players.map(p => p.lastRoll!));
+      const winners = gameState.players.filter(p => p.lastRoll === maxRoll);
+      
+      // Award points (1 point per winner in case of tie)
+      winners.forEach(winner => winner.score += 1);
+
+      // Check for game winner
+      const gameWinner = gameState.players.find(p => p.score >= gameState.pointsToWin);
+      if (gameWinner) {
+        gameState.gamePhase = 'ended';
+        gameState.winner = gameWinner;
+      } else {
+        // Reset for next round
+        gameState.players.forEach(p => p.lastRoll = undefined);
+        gameState.currentRound++;
+        gameState.currentPlayerIndex = 0;
+      }
+    } else {
+      // Move to next player
+      gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+    }
+
+    this.games.set(lobbyCode, gameState);
+    await this.db.saveGame(gameState);
+    this.emit('diceRolled', { lobbyCode, playerId, roll, gameState });
+    return { gameState, roll };
+  }
+
+  async processAITurn(lobbyCode: string): Promise<void> {
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState || gameState.gamePhase !== 'playing') {
+      return;
+    }
+
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    if (currentPlayer.isAI) {
+      // AI rolls after a short delay
+      setTimeout(async () => {
+        try {
+          console.log(`AI ${currentPlayer.id} rolling dice...`);
+          await this.rollDice(lobbyCode, currentPlayer.id);
+        } catch (error) {
+          console.error('AI turn error:', error);
+        }
+      }, 1000 + Math.random() * 2000); // Random delay 1-3 seconds
+    }
+  }
+
+  async kickPlayer(lobbyCode: string, hostId: string, targetPlayerId: string): Promise<GameState> {
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState) {
+      throw new Error('Game not found');
+    }
+
+    const host = gameState.players.find(p => p.id === hostId);
+    if (!host || !host.isHost) {
+      throw new Error('Only the host can kick players');
+    }
+
+    const targetIndex = gameState.players.findIndex(p => p.id === targetPlayerId);
+    if (targetIndex === -1) {
+      throw new Error('Player not found');
+    }
+
+    // Add to kicked list by player name for 30 seconds
+    const kickedName = gameState.players[targetIndex].name;
+    if (!this.kickedPlayers.has(lobbyCode)) {
+      this.kickedPlayers.set(lobbyCode, new Map());
+    }
+    this.kickedPlayers.get(lobbyCode)!.set(kickedName, Date.now() + 30000);
+
+    // Remove player
+    gameState.players.splice(targetIndex, 1);
+
+    // Adjust current player index if necessary
+    if (gameState.currentPlayerIndex >= targetIndex && gameState.currentPlayerIndex > 0) {
+      gameState.currentPlayerIndex--;
+    }
+
+    // Clean up socket mappings
+    const socketId = this.playerSockets.get(targetPlayerId);
+    if (socketId) {
+      this.playerSockets.delete(targetPlayerId);
+      this.socketPlayers.delete(socketId);
+    }
+
+    this.games.set(lobbyCode, gameState);
+    await this.db.saveGame(gameState);
+    return gameState;
+  }
+
+  async leaveGame(socketId: string): Promise<{ gameState: GameState | null; lobbyCode: string | null }> {
+    const playerId = this.socketPlayers.get(socketId);
+    if (!playerId) {
+      return { gameState: null, lobbyCode: null };
+    }
+
+    // Find the game this player is in
+    let foundGame: GameState | null = null;
+    let lobbyCode: string | null = null;
+
+    for (const [code, game] of this.games.entries()) {
+      if (game.players.some(p => p.id === playerId)) {
+        foundGame = game;
+        lobbyCode = code;
+        break;
+      }
+    }
+
+    if (!foundGame || !lobbyCode) {
+      return { gameState: null, lobbyCode: null };
+    }
+
+    const player = foundGame.players.find(p => p.id === playerId);
+    if (!player) {
+      return { gameState: null, lobbyCode: null };
+    }
+
+    if (foundGame.gamePhase === 'playing') {
+      // Replace with AI during game
+      player.isConnected = false;
+      player.isAI = true;
+      player.name = player.name + 'bot';
+    } else {
+      // Remove player from lobby
+      const playerIndex = foundGame.players.findIndex(p => p.id === playerId);
+      foundGame.players.splice(playerIndex, 1);
+
+      // If host left, assign new host
+      if (player.isHost && foundGame.players.length > 0) {
+        foundGame.players[0].isHost = true;
+      }
+    }
+
+    // Clean up socket mappings
+    this.playerSockets.delete(playerId);
+    this.socketPlayers.delete(socketId);
+
+    // Delete game if no players left
+    if (foundGame.players.length === 0) {
+      this.games.delete(lobbyCode);
+      await this.db.deleteGame(foundGame.id);
+      return { gameState: null, lobbyCode };
+    }
+
+    this.games.set(lobbyCode, foundGame);
+    await this.db.saveGame(foundGame);
+    return { gameState: foundGame, lobbyCode };
+  }
+
+  async sendMessage(lobbyCode: string, playerId: string, message: string): Promise<ChatMessage> {
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState) {
+      throw new Error('Game not found');
+    }
+
+    const player = gameState.players.find(p => p.id === playerId);
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
+    const chatMessage: ChatMessage = {
+      id: uuidv4(),
+      playerId,
+      playerName: player.name,
+      message: message.trim(),
+      timestamp: Date.now()
+    };
+
+    gameState.chat.push(chatMessage);
+    
+    // Keep only last 100 messages
+    if (gameState.chat.length > 100) {
+      gameState.chat = gameState.chat.slice(-100);
+    }
+
+    await this.db.saveChatMessage(chatMessage, gameState.id);
+    this.games.set(lobbyCode, gameState);
+    
+    return chatMessage;
+  }
+
+  async returnToLobby(lobbyCode: string): Promise<GameState> {
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState) {
+      throw new Error('Game not found');
+    }
+
+    gameState.gamePhase = 'lobby';
+    gameState.currentPlayerIndex = 0;
+    gameState.winner = undefined;
+    gameState.currentRound = 1;
+
+    // Reset player states but keep scores for reference
+    gameState.players.forEach(p => {
+      p.lastRoll = undefined;
+    });
+
+    this.games.set(lobbyCode, gameState);
+    await this.db.saveGame(gameState);
+    return gameState;
+  }
+
+  getPlayerBySocket(socketId: string): string | undefined {
+    return this.socketPlayers.get(socketId);
+  }
+
+  getSocketByPlayer(playerId: string): string | undefined {
+    return this.playerSockets.get(playerId);
+  }
+
+  getGame(lobbyCode: string): GameState | undefined {
+    return this.games.get(lobbyCode);
+  }
+
+  async cleanup(): Promise<void> {
+    await this.db.cleanup();
+  }
+}
