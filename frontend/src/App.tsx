@@ -26,8 +26,6 @@ const AppContent: React.FC = () => {
       });
       setCurrentPage('lobby');
     }
-    // Only run on mount and when socket is ready
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
   const { gameState, isConnected } = useSocket();
 

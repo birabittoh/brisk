@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
+import { GameState } from '../types';
 
 const italianSoccerPlayers = [
   "Baggio", "Maldini", "Baresi", "Del Piero", "Totti", 
@@ -77,33 +78,53 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
     }
   };
 
+  // Helper to update query string with lobby code
+  const updateQueryWithLobbyCode = (code: string) => {
+    if (code && typeof code === "string" && code.trim()) {
+      const params = new URLSearchParams(window.location.search);
+      params.set('c', code.trim().toUpperCase());
+      window.history.replaceState({}, document.title, `${window.location.pathname}?${params.toString()}`);
+      console.log(code);
+    }
+  };
+
   useEffect(() => {
     if (!socket) return;
 
-    const handleLobbyCreated = (): void => {
+    const handleLobbyCreated = (payload: { gameState: GameState; playerUuid: string }): void => {
+      const { gameState } = payload;
+      console.log("handleLobbyCreated: received gameState", gameState);
       setIsCreating(false);
+      const createdLobbyCode = gameState?.lobbyCode;
+      console.log("handleLobbyCreated: createdLobbyCode", createdLobbyCode);
+      if ((!createdLobbyCode || typeof createdLobbyCode !== "string")) {
+        console.error("handleLobbyCreated: Invalid lobby code received", createdLobbyCode);
+        if (typeof setError === "function") {
+          console.log("handleLobbyCreated: setting error");
+          setError("Failed to create lobby: Invalid lobby code received.");
+        }
+        return;
+      }
+      console.log("handleLobbyCreated: updating query string with", createdLobbyCode);
+      setLobbyCode(createdLobbyCode);
+      updateQueryWithLobbyCode(createdLobbyCode);
+      console.log("handleLobbyCreated: after updateQueryWithLobbyCode");
       onPageChange('lobby');
     };
 
-    if (isCreating) {
-      socket.on('lobby-created', handleLobbyCreated);
-    }
+    socket.on('lobby-created', handleLobbyCreated as any);
 
     return () => {
-      socket.off('lobby-created', handleLobbyCreated);
+      socket.off('lobby-created', handleLobbyCreated as any);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCreating, socket, onPageChange]);
+  }, [socket, onPageChange]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handleLobbyJoined = (): void => {
       setIsJoining(false);
-      // Clear query parameters after joining
-      if (window.location.search) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+      updateQueryWithLobbyCode(lobbyCode);
       onPageChange('lobby');
     };
 
@@ -114,7 +135,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
     return () => {
       socket.off('lobby-joined', handleLobbyJoined);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isJoining, socket, onPageChange]);
 
   // Handle kick-timeout error and countdown
