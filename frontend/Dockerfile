@@ -8,7 +8,9 @@ RUN npm ci
 
 COPY tsconfig.json vite.config.ts tailwind.config.js ./
 COPY src ./src
+COPY public ./public
 COPY index.html ./
+COPY .env ./
 RUN npm run build
 
 # Stage 2: Serve with nginx
