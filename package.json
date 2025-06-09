@@ -1,7 +1,7 @@
 {
   "name": "brisk",
   "version": "1.0.0",
-  "description": "A websocket-based dice game.",
+  "description": "A websocket-based briscola game.",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm --prefix ./backend run dev",

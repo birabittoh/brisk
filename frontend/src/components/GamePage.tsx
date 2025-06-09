@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { Player } from '../types';
+import { Player, Card, GameState } from '../types';
 import Chat from './Chat';
+import { suitMap } from '../common';
 
 interface GamePageProps {
   onPageChange: (page: 'landing' | 'lobby' | 'game') => void;
@@ -10,7 +11,9 @@ interface GamePageProps {
 const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
   const { socket, gameState, currentPlayerId, currentPlayerUuid } = useSocket();
   const [isChatMinimized, setIsChatMinimized] = useState<boolean>(false);
-  const [showDiceAnimation, setShowDiceAnimation] = useState<boolean>(false);
+
+  // Highlight round results for 1s after all players have played
+  const [showRoundResults, setShowRoundResults] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -18,18 +21,13 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
     const handleGameEnded = (): void => {
       setTimeout(() => {
         onPageChange('lobby');
-      }, 10000); // Wait 10 seconds before 
+      }, 10000);
     };
 
     socket.on('game-ended', handleGameEnded);
-    socket.on('dice-rolled', () => {
-      setShowDiceAnimation(true);
-      setTimeout(() => setShowDiceAnimation(false), 1000);
-    });
 
     return () => {
       socket.off('game-ended', handleGameEnded);
-      socket.off('dice-rolled');
     };
   }, [socket, onPageChange]);
 
@@ -41,24 +39,44 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
   const isCurrentPlayerTurn = gameState?.players?.[gameState?.currentPlayerIndex]?.id === currentPlayerUuid;
   const currentTurnPlayer = gameState?.players?.[gameState?.currentPlayerIndex];
 
-  // New: Check if all players have rolled
-  const allPlayersRolled = gameState?.players?.every(p => typeof p.lastRoll === 'number') && gameState?.players?.length > 0;
+  // Turn timeout logic
+  const [turnTimeLeft, setTurnTimeLeft] = React.useState<number>(0);
 
-  // New: Find max roll and winners
-  const rolls = gameState?.players?.map(p => p.lastRoll ?? 0) ?? [];
-  const maxRoll = Math.max(...rolls);
-  const winners = gameState?.players?.filter(p => p.lastRoll === maxRoll) ?? [];
-  const isDraw = winners.length > 1;
+  React.useEffect(() => {
+    const update = () => {
+      if (!gameState?.turnEndTimestamp) {
+        setTurnTimeLeft(0);
+        return;
+      }
+      const now = Date.now();
+      setTurnTimeLeft(Math.max(0, gameState.turnEndTimestamp - now));
+    };
+    update();
+    const interval = setInterval(update, 250);
+    return () => clearInterval(interval);
+  }, [gameState?.turnEndTimestamp, gameState?.currentPlayerIndex]);
 
-  // New: Next round handler
-  const handleNextRound = (): void => {
-    socket.emit('next-round');
+  // Played cards for this round
+  const playedCards = gameState?.playedCards ?? [];
+  const lastPlayedCards = gameState?.lastPlayedCards ?? [];
+
+  // Show round results when lastRoundWinner changes (i.e., after backend resolves round)
+  useEffect(() => {
+    if (!gameState) return;
+    // When lastRoundWinner is set and lastPlayedCards is updated, show results
+    if (gameState.lastRoundWinner && lastPlayedCards.length > 0) {
+      setShowRoundResults(true);
+      setTimeout(() => {
+        setShowRoundResults(false);
+      }, 3000);
+    }
+  }, [gameState?.lastRoundWinner, gameState?.currentRound]);
+
+  const handlePlayCard = (card: Card): void => {
+    socket.emit('play-card', { card });
   };
 
-  const handleRollDice = (): void => {
-    socket.emit('roll-dice');
-  };
-
+  // Leave game and go to landing page
   const handleLeaveGame = (): void => {
     if (socket) {
       socket.emit('leave-lobby');
@@ -67,9 +85,58 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
     onPageChange('landing');
   };
 
-  const getDiceEmoji = (roll?: number): string => {
-    const diceEmojis = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-    return roll ? diceEmojis[roll] : '🎲';
+  // Leave game and return to lobby
+  const handleReturnToLobby = (): void => {
+    if (socket) {
+      socket.emit('leave-lobby');
+    }
+    // Clear game state to avoid stale/mixed player data
+    if (typeof window !== "undefined") {
+      // @ts-ignore
+      if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
+        // do nothing
+      }
+    }
+    // Try to clear gameState if possible
+    if (typeof window !== "undefined" && window.dispatchEvent) {
+      window.dispatchEvent(new Event("clearGameState"));
+    }
+    onPageChange('lobby');
+  };
+
+  const getCardEmoji = (card: Card) => {
+    return `${card.number}${suitMap[card.suit] || ''}`;
+  };
+
+  const getCardValue = (card: Card, gameState: GameState | null): number => {
+    if (!gameState?.lastCard || !gameState.playedCards) return card.number;
+    const firstSuitInRound = gameState.playedCards[0]?.card.suit;
+    const briscolaSuit = gameState?.lastCard.suit;
+
+    const playedCards = gameState.playedCards.map(c => c.card).concat(card);;
+
+    const dominantSuit = firstSuitInRound ?
+      (playedCards.some(pc => pc.suit === briscolaSuit) ? briscolaSuit : firstSuitInRound) :
+      briscolaSuit;
+
+    if (card.suit !== dominantSuit) {
+      return 0;
+    }
+
+    switch (card.number) {
+      case 1: // Ace
+        return 11;
+      case 3: // Three
+        return 10;
+      case 8: // Queen
+        return 2;
+      case 9: // Knight
+        return 3;
+      case 10: // King
+        return 4;
+      default:
+        return 0;
+    }
   };
 
   const getPlayerStatusEmoji = (player: Player): string => {
@@ -123,10 +190,10 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
           </div>
 
           <button
-            onClick={handleLeaveGame}
+            onClick={handleReturnToLobby}
             className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105"
           >
-            🏠 Return to Lobby
+            🏠 Return to lobby
           </button>
 
           <p className="text-sm text-gray-500 mt-4">
@@ -135,7 +202,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
         </div>
       </div>
     );
-}
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 to-blue-900 p-4">
@@ -145,7 +212,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-3xl shadow-2xl p-6">
               <div className="text-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-800 mb-2">🎲 BRISK</h1>
+                <h1 className="text-3xl font-bold text-gray-800 mb-2">🃏 BRISK</h1>
                 <div className="bg-blue-100 rounded-xl p-3">
                   <p className="text-lg font-medium text-blue-800">
                     Round {gameState?.currentRound ?? '-'}
@@ -153,73 +220,92 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                   <p className="text-sm text-blue-600">
                     First to {gameState?.pointsToWin ?? '-'} points wins!
                   </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    <span className="font-semibold">Deck:</span> {gameState?.deck ? gameState.deck.length : 0} cards left
+                  </p>
                 </div>
+                {/* Last Card Reveal */}
+                {gameState?.lastCard && (
+                  <div className="mt-4 flex flex-col items-center">
+                    <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Last Card</div>
+                    <div className="inline-block bg-yellow-100 border-2 border-yellow-400 rounded-xl px-6 py-3 shadow text-3xl font-bold text-yellow-800">
+                      {getCardEmoji(gameState.lastCard)}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Current Turn or Results */}
               <div className="mb-6">
-                {!allPlayersRolled ? (
-                  <div className="bg-gradient-to-r from-yellow-400 to-orange-400 rounded-xl p-4 text-center">
-                    <h2 className="text-xl font-bold text-white mb-2">
-                      {isCurrentPlayerTurn ? "🎯 Your Turn!" : `🎯 ${currentTurnPlayer?.name}'s Turn`}
-                    </h2>
-                    {isCurrentPlayerTurn && !currentPlayer?.isAI && (
-                      <button
-                        onClick={handleRollDice}
-                        className={`bg-white text-orange-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-gray-100 transition-all transform hover:scale-105 ${
-                          showDiceAnimation ? 'animate-bounce' : ''
+                {/* Always show played cards for this round */}
+                <div className="flex flex-wrap justify-center gap-4 mb-4 mt-2">
+                  {(showRoundResults ? lastPlayedCards : playedCards).map((pc, idx) => {
+                    const player = gameState?.players?.find(p => p.id === pc.playerId);
+                    return (
+                      <div
+                        key={pc.playerId}
+                        className={`p-4 rounded-xl bg-white shadow-md min-w-[120px] ${
+                          (showRoundResults && gameState?.lastRoundWinner === pc.playerId)
+                            ? 'border-4 border-yellow-400 scale-105'
+                            : 'border-2 border-gray-200'
                         }`}
                       >
-                        🎲 Roll Dice!
-                      </button>
-                    )}
-                    {currentTurnPlayer?.isAI && (
-                      <div className="text-white font-medium">
-                        🤖 AI is thinking...
+                        <div className="text-lg font-semibold text-gray-800 flex items-center justify-center gap-2">
+                          {player?.name}
+                          {player?.id === currentPlayerUuid && (
+                            <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs">YOU</span>
+                          )}
+                        </div>
+                        <div className="text-4xl mt-2">{getCardEmoji(pc.card)}</div>
+                        <div className="text-sm text-gray-600 mt-1">Value: {getCardValue(pc.card, gameState)}</div>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-gradient-to-r from-green-400 to-blue-400 rounded-xl p-6 text-center shadow-lg">
-                    <h2 className="text-2xl font-bold text-white mb-4">🎲 Round Results</h2>
-                    <div className="flex flex-wrap justify-center gap-4 mb-4">
-                      {gameState?.players?.map((player) => (
-                        <div
-                          key={player.id}
-                          className={`p-4 rounded-xl bg-white shadow-md min-w-[120px] ${
-                            winners.some(w => w.id === player.id)
-                              ? 'border-4 border-yellow-400 scale-105'
-                              : 'border-2 border-gray-200'
-                          }`}
-                        >
-                          <div className="text-lg font-semibold text-gray-800 flex items-center justify-center gap-2">
-                            {player.name}
-                            {player.id === currentPlayerUuid && (
-                              <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs">YOU</span>
-                            )}
-                          </div>
-                          <div className="text-4xl mt-2">{getDiceEmoji(player.lastRoll)}</div>
-                          <div className="text-sm text-gray-600 mt-1">Roll: {player.lastRoll ?? '-'}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mb-6">
-                      {isDraw ? (
-                        <div className="text-xl font-bold text-yellow-200">🤝 It's a draw!</div>
-                      ) : (
-                        <div className="text-xl font-bold text-yellow-200">
-                          🏆 {winners[0]?.name} wins the round!
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleNextRound}
-                      className="w-full bg-gradient-to-r from-purple-600 to-blue-700 text-white py-5 px-8 rounded-2xl font-extrabold text-2xl shadow-xl hover:from-purple-700 hover:to-blue-800 transition-all transform hover:scale-105"
-                    >
-                      ➡️ Next Round
-                    </button>
+                    );
+                  })}
+                </div>
+                {showRoundResults && (
+                  <div className="bg-gradient-to-r from-green-400 to-blue-400 rounded-xl p-6 text-center shadow-lg mb-4">
+                    {gameState?.lastRoundWinner ? (
+                      <div className="text-xl font-bold text-yellow-200">
+                        🏆 {gameState?.players?.find(p => p.id === gameState.lastRoundWinner)?.name} wins the round!
+                      </div>
+                    ) : null}
                   </div>
                 )}
+                <div className={`bg-gradient-to-r ${
+                  (isCurrentPlayerTurn && !showRoundResults)
+                    ? 'from-yellow-400 to-orange-400' 
+                    : 'from-blue-400 to-indigo-400'
+                } rounded-xl p-4 text-center mb-4`}>
+                  <h2 className="text-xl font-bold text-white mb-2">
+                    {isCurrentPlayerTurn ? "🎯 Your turn!" : `🎯 ${currentTurnPlayer?.name}'s turn`}
+                  </h2>
+                  <div className="text-white text-lg font-mono mb-2">
+                    {Math.round(turnTimeLeft / 1000)}s
+                  </div>
+                  {!currentPlayer?.isAI && (
+                    <div className="flex justify-center gap-4 mt-4">
+                      {currentPlayer?.hand?.map((card, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handlePlayCard(card)}
+                          disabled={!isCurrentPlayerTurn || showRoundResults}
+                          className={`bg-white text-orange-600 px-8 py-4 rounded-xl font-bold text-lg border-2 border-orange-400
+                            ${(!isCurrentPlayerTurn || showRoundResults)
+                              ? 'opacity-50 cursor-not-allowed'
+                              : 'hover:bg-gray-100 transition-all transform hover:scale-105'
+                            }`}
+                        >
+                          {getCardEmoji(card)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {currentTurnPlayer?.isAI && (
+                    <div className="text-white font-medium">
+                      🤖 AI is thinking...
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Players Grid */}
@@ -265,21 +351,10 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                     </div>
 
                     <div className="flex items-center justify-center">
-                      {player.lastRoll ? (
-                        <div className="text-center">
-                          <div className="text-4xl mb-1">
-                            {getDiceEmoji(player.lastRoll)}
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            Last roll: {player.lastRoll}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-400">
-                          <div className="text-4xl mb-1">🎲</div>
-                          <div className="text-sm">Ready to roll</div>
-                        </div>
-                      )}
+                      <div className="text-center text-gray-400">
+                        <div className="text-4xl mb-1">🃏</div>
+                        <div className="text-sm">Playing cards</div>
+                      </div>
                     </div>
                   </div>
                 ))}

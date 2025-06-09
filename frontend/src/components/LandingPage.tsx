@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { LobbyCreatedPayload } from '../types';
+import { suitMap } from '../common';
 
 const italianSoccerPlayers = [
   "Baggio", "Maldini", "Baresi", "Del Piero", "Totti", 
@@ -78,6 +79,20 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>): void => {
+    const pastedText = e.clipboardData.getData('text');
+    
+    if (pastedText.startsWith('http')) {
+      const match = pastedText.match(/[?&]c=([^&]+)/);
+      
+      if (match && match[1]) {
+        const code = match[1].toUpperCase().replace(/[^A-Z0-9]/g, '');
+        setLobbyCode(code);
+        e.preventDefault();
+      }
+    }
+  };
+  
   // Helper to update query string with lobby code
   const updateQueryWithLobbyCode = (code: string) => {
     if (code && typeof code === "string" && code.trim()) {
@@ -178,8 +193,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
     <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-800 mb-2">🎲 BRISK</h1>
-          <p className="text-gray-600">Roll the dice, win the game!</p>
+          <h1 className="text-5xl font-bold text-gray-800 mb-2">🃏 BRISK</h1>
         </div>
 
         <div className="space-y-6">
@@ -226,6 +240,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
               value={lobbyCode}
               onChange={(e) => setLobbyCode(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
+              onClick={(e) =>  e.currentTarget.select() }
+              onPaste={handlePaste}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 transition-colors text-lg text-center font-mono"
               placeholder="Enter lobby code"
               maxLength={6}
@@ -269,9 +285,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
             </div>
           )}
         </div>
-
-        <div className="mt-8 text-center text-gray-500 text-sm">
-          <p>🎯 Roll the highest dice to win points!</p>
+        <div className="mt-8 text-center text-gray-600 text-sm">
+          {Object.values(suitMap).map((suit) => (
+            <span key={suit} className="inline-block mx-1 text-2xl">
+              {suit}
+            </span>
+          ))}
         </div>
       </div>
     </div>

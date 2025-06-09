@@ -82,7 +82,7 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-3xl shadow-2xl p-8">
               <div className="text-center mb-8">
-                <h1 className="text-4xl font-bold text-gray-800 mb-4">🎲 BRISK</h1>
+                <h1 className="text-4xl font-bold text-gray-800 mb-4">🃏 BRISK</h1>
                 <div className="bg-gray-100 rounded-xl p-4 mb-6">
                   <div className="flex items-center justify-center space-x-4">
                     <span className="text-lg font-medium text-gray-700">Code:</span>
@@ -160,7 +160,7 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
               </div>
               <div className="mt-6 text-center text-gray-500 text-sm">
                 <p>🎯 Game starts when the host clicks "Start game"</p>
-                <p>🎲 Roll the highest dice to win points!</p>
+                <p>🃏 Play briscola to win points!</p>
               </div>
             </div>
           </div>

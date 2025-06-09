@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, Player, ChatMessage } from './types';
+import { GameState, Player, ChatMessage, Card } from './types';
 import { Database } from './database';
 import { EventEmitter } from 'events';
 
@@ -16,6 +16,7 @@ export class GameManager extends EventEmitter {
   private socketPlayers: Map<string, string> = new Map(); // socketId -> playerId
   private kickedPlayers: Map<string, Map<string, number>> = new Map(); // lobbyCode -> (playerId -> expiry timestamp)
   private db: Database;
+  private turnTimeouts: Map<string, NodeJS.Timeout> = new Map(); // lobbyCode -> timeout
 
   constructor(db: Database) {
     super();
@@ -23,9 +24,58 @@ export class GameManager extends EventEmitter {
     this.loadGamesFromDB();
   }
 
+  private setTurnTimeout(lobbyCode: string) {
+    const timeoutMS = 15000;
+    // Clear any existing timeout
+    if (this.turnTimeouts.has(lobbyCode)) {
+      clearTimeout(this.turnTimeouts.get(lobbyCode)!);
+    }
+    const gameState = this.games.get(lobbyCode);
+    if (!gameState || gameState.gamePhase !== 'playing') return;
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    if (!currentPlayer || !currentPlayer.hand || currentPlayer.hand.length === 0) return;
+
+    if (currentPlayer.isAI) {
+      // Instantly play for AI
+      this.processAITurn(lobbyCode);
+      return;
+    }
+
+    this.turnTimeouts.set(
+      lobbyCode,
+      setTimeout(async () => {
+        // Pick a random card for the player if they haven't played
+        const gs = this.games.get(lobbyCode);
+        if (!gs || gs.gamePhase !== 'playing') return;
+        const player = gs.players[gs.currentPlayerIndex];
+        if (!player || !player.hand || player.hand.length === 0) return;
+        // Pick random card
+        const randomIdx = Math.floor(Math.random() * player.hand.length);
+        const card = player.hand[randomIdx];
+        try {
+          await this.playCard(lobbyCode, player.id, card);
+          this.emit('game-updated', gs);
+        } catch (err) {
+          console.error('Auto-play error:', err);
+        }
+      }, timeoutMS)
+    );
+  }
+
+  private clearTurnTimeout(lobbyCode: string) {
+    if (this.turnTimeouts.has(lobbyCode)) {
+      clearTimeout(this.turnTimeouts.get(lobbyCode)!);
+      this.turnTimeouts.delete(lobbyCode);
+    }
+  }
+
   private async loadGamesFromDB(): Promise<void> {
     // This would load existing games from database on server restart
     // For now, we'll start fresh each time
+  }
+
+  randomRange(min: number, max: number): number {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
   generateRandomName(): string {
@@ -158,6 +208,18 @@ export class GameManager extends EventEmitter {
     return gameState;
   }
 
+  private handleSpecialDeckCases(deck: Card[], numPlayers: number): void {
+    // Add special cases here
+    if (numPlayers === 3) {
+      // Remove the first card with number = 2
+      const idx = deck.findIndex(card => card.number === 2);
+      if (idx !== -1) {
+        deck.splice(idx, 1);
+      }
+    }
+    // Future: add more cases for other player counts
+  }
+
   async startGame(lobbyCode: string, playerId: string): Promise<GameState> {
     const gameState = this.games.get(lobbyCode);
     if (!gameState) {
@@ -173,70 +235,206 @@ export class GameManager extends EventEmitter {
       throw new Error('Need at least 2 players to start');
     }
 
+    if (gameState.players.length > 5) {
+      throw new Error('Too many players, maximum is 5');
+    }
+
     gameState.gamePhase = 'playing';
     gameState.currentPlayerIndex = 0;
     gameState.currentRound = 1;
+    const timeoutMS = 5000;
+    gameState.turnStartTimestamp = Date.now();
+    gameState.turnEndTimestamp = gameState.turnStartTimestamp + timeoutMS;
+    this.setTurnTimeout(lobbyCode);
 
-    // Reset scores
+    // Reset scores, hands, and wonCards
     gameState.players.forEach(p => {
       p.score = 0;
-      p.lastRoll = undefined;
+      p.hand = [];
+      p.wonCards = [];
     });
+
+    // Create and shuffle deck
+    const suits: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
+    let deck: { number: number; suit: 'a' | 'b' | 'c' | 'd' }[] = [];
+    for (const suit of suits) {
+      for (let number = 1; number <= 10; number++) {
+        deck.push({ number, suit });
+      }
+    }
+    // Handle special cases before shuffling
+    this.handleSpecialDeckCases(deck, gameState.players.length);
+    // Shuffle deck
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    gameState.deck = deck;
+
+    // Reveal last card (but do not remove it from the deck)
+    if (deck.length > 0) {
+      gameState.lastCard = deck[0];
+    }
+
+    // Deal 3 cards to each player
+    for (const player of gameState.players) {
+      player.hand = [];
+      for (let i = 0; i < 3; i++) {
+        if (gameState.deck && gameState.deck.length > 0) {
+          player.hand.push(gameState.deck.pop()!);
+        }
+      }
+    }
+
+    gameState.playedCards = [];
 
     this.games.set(lobbyCode, gameState);
     await this.db.saveGame(gameState);
     return gameState;
   }
 
-  async rollDice(lobbyCode: string, playerId: string): Promise<{ gameState: GameState; roll: number }> {
+  // Card play logic will be implemented here.
+
+  async playCard(lobbyCode: string, playerId: string, card: { number: number; suit: 'a' | 'b' | 'c' | 'd' }): Promise<GameState> {
     const gameState = this.games.get(lobbyCode);
-    if (!gameState) {
-      throw new Error('Game not found');
+    if (!gameState || gameState.gamePhase !== 'playing') {
+      throw new Error('Game not found or not in progress');
     }
 
-    if (gameState.gamePhase !== 'playing') {
-      throw new Error('Game is not in progress');
+    const player = gameState.players.find(p => p.id === playerId);
+    if (!player || !player.hand) {
+      throw new Error('Player not found');
     }
 
-    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (currentPlayer.id !== playerId && !currentPlayer.isAI) {
-      throw new Error('Not your turn');
+    // Validate card is in hand
+    const cardIndex = player.hand.findIndex(
+      c => c.number === card.number && c.suit === card.suit
+    );
+    if (cardIndex === -1) {
+      throw new Error('Card not in hand');
     }
 
-    const roll = Math.floor(Math.random() * 6) + 1;
-    currentPlayer.lastRoll = roll;
+    // Remove card from hand and add to playedCards
+    const playedCard = player.hand.splice(cardIndex, 1)[0];
+    if (!gameState.playedCards) gameState.playedCards = [];
+    gameState.playedCards.push({ playerId, card: playedCard });
 
-    // Check if all players have rolled
-    const allRolled = gameState.players.every(p => p.lastRoll !== undefined);
-    
-    if (allRolled) {
-      // Find winner of this round
-      const maxRoll = Math.max(...gameState.players.map(p => p.lastRoll!));
-      const winners = gameState.players.filter(p => p.lastRoll === maxRoll);
-      
-      // Award points (1 point per winner in case of tie)
-      winners.forEach(winner => winner.score += 1);
+    // Move to next player
+    gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
 
-      // Check for game winner
-      const gameWinner = gameState.players.find(p => p.score >= gameState.pointsToWin);
-      if (gameWinner) {
-        gameState.gamePhase = 'ended';
-        gameState.winner = gameWinner;
+    // Clear previous turn timeout
+    this.clearTurnTimeout(lobbyCode);
+
+    // If all players have played, resolve round
+    if (gameState.playedCards.length === gameState.players.length) {
+      // --- BRISCOLA/DOMINANT SUIT LOGIC ---
+      let winner: { playerId: string; card: { number: number; suit: string } } | undefined = undefined;
+      let dominantSuit: string | undefined = undefined;
+      const briscolaSuit = gameState.lastCard?.suit;
+
+      // Check if any briscola cards were played
+      const briscolaCards = gameState.playedCards.filter(pc => pc.card.suit === briscolaSuit);
+      if (briscolaCards.length > 0) {
+        dominantSuit = briscolaSuit;
       } else {
-        // Reset for next round
-        gameState.players.forEach(p => p.lastRoll = undefined);
-        gameState.currentRound++;
+        dominantSuit = gameState.playedCards[0]?.card.suit;
+      }
+
+      // Card value function
+      function getCardValue(card: { number: number; suit: string }) {
+        if (card.number === 3) return 10;
+        if (card.number === 1) return 11;
+        if (card.number === 8) return 2;
+        if (card.number === 9) return 3;
+        if (card.number === 10) return 4;
+        return 0;
+      }
+
+      // Find the highest value card of the dominant suit, first in play order wins ties
+      let maxValue = -1;
+      let maxNumber = -1;
+      for (const pc of gameState.playedCards) {
+        if (pc.card.suit === dominantSuit) {
+          const value = getCardValue(pc.card);
+          if (
+            value > maxValue ||
+            (value === maxValue && value === 0 && pc.card.number > maxNumber)
+          ) {
+            winner = pc;
+            maxValue = value;
+            maxNumber = pc.card.number;
+          }
+        }
+      }
+
+      // Store winner for frontend display (always one winner)
+      gameState.lastRoundWinner = winner?.playerId;
+
+      // Store played cards for frontend display
+      gameState.lastPlayedCards = [...gameState.playedCards];
+
+      // Give all played cards to the winner's wonCards and update their score immediately
+      if (winner) {
+        const winPlayer = gameState.players.find(p => p.id === winner.playerId);
+        if (winPlayer) {
+          if (!winPlayer.wonCards) winPlayer.wonCards = [];
+          for (const pc of gameState.playedCards) {
+            winPlayer.wonCards.push(pc.card);
+          }
+          // Update score immediately after collecting cards
+          winPlayer.score = (winPlayer.wonCards ?? []).reduce((sum, card) => sum + getCardValue(card), 0);
+        }
+      }
+
+      // Deal cards so each player has up to 3 cards, if enough in deck
+      if (gameState.deck && gameState.deck.length > 0) {
+        for (const player of gameState.players) {
+          while (player.hand!.length < 3 && gameState.deck.length > 0) {
+            player.hand!.push(gameState.deck.pop()!);
+          }
+        }
+      }
+
+      // Prepare for next round
+      gameState.playedCards = [];
+      gameState.currentRound += 1;
+      // Set next starting player to last round winner
+      if (gameState.lastRoundWinner) {
+        const winnerIndex = gameState.players.findIndex(p => p.id === gameState.lastRoundWinner);
+        gameState.currentPlayerIndex = winnerIndex !== -1 ? winnerIndex : 0;
+      } else {
         gameState.currentPlayerIndex = 0;
       }
+
+      // Set new turn start timestamp for next round
+      const timeoutMS = 5000;
+      gameState.turnStartTimestamp = Date.now();
+      gameState.turnEndTimestamp = gameState.turnStartTimestamp + timeoutMS;
+
+      // Check if some players have empty hands (game end)
+      const allEmpty = gameState.players.some(p => !p.hand || p.hand.length === 0);
+      if (allEmpty) {
+        gameState.gamePhase = 'ended';
+        
+        // Find player with highest score as the winner
+        gameState.winner = gameState.players.reduce(
+          (winner, player) => (!winner || player.score > winner.score) ? player : winner, undefined as Player | undefined
+        );
+      } else {
+        // Set timeout for next turn if not game end
+        this.setTurnTimeout(lobbyCode);
+      }
     } else {
-      // Move to next player
-      gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+      // Set new turn start timestamp for next player
+      const timeoutMS = 5000;
+      gameState.turnStartTimestamp = Date.now();
+      gameState.turnEndTimestamp = gameState.turnStartTimestamp + timeoutMS;
+      this.setTurnTimeout(lobbyCode);
     }
 
     this.games.set(lobbyCode, gameState);
     await this.db.saveGame(gameState);
-    this.emit('diceRolled', { lobbyCode, playerId, roll, gameState });
-    return { gameState, roll };
+    return gameState;
   }
 
   async processAITurn(lobbyCode: string): Promise<void> {
@@ -246,15 +444,19 @@ export class GameManager extends EventEmitter {
     }
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (currentPlayer.isAI) {
-      // AI rolls after a short delay
+    if (currentPlayer.isAI && currentPlayer.hand && currentPlayer.hand.length > 0) {
+      try {
+        // Pick a random card from AI's hand
+        const randomIdx = Math.floor(Math.random() * currentPlayer.hand!.length);
+        const card = currentPlayer.hand![randomIdx];
+        await this.playCard(lobbyCode, currentPlayer.id, card);
+      } catch (error) {
+        console.error('AI turn error:', error);
+      }
+      /*
       setTimeout(async () => {
-        try {
-          await this.rollDice(lobbyCode, currentPlayer.id);
-        } catch (error) {
-          console.error('AI turn error:', error);
-        }
-      }, 1000 + Math.random() * 2000); // Random delay 1-3 seconds
+        
+      }, 1000 + Math.random() * 2000); // Random delay 1-3 seconds */
     }
   }
 
@@ -413,7 +615,7 @@ export class GameManager extends EventEmitter {
 
     // Reset player states but keep scores for reference
     gameState.players.forEach(p => {
-      p.lastRoll = undefined;
+      p.hand = [];
     });
 
     this.games.set(lobbyCode, gameState);

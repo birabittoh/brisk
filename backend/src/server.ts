@@ -33,11 +33,13 @@ if (process.env.NODE_ENV === 'production') {
 const db = new Database();
 const gameManager = new GameManager(db);
 
-// Listen for dice rolls (human or AI) and broadcast to all players
-gameManager.on('diceRolled', ({ lobbyCode, playerId, roll, gameState }) => {
-  io.to(lobbyCode).emit('dice-rolled', { playerId, roll });
-  io.to(lobbyCode).emit('game-updated', gameState);
+// Listen for game-updated events from GameManager and notify clients
+gameManager.on('game-updated', (gameState) => {
+  if (gameState && gameState.lobbyCode) {
+    io.to(gameState.lobbyCode).emit('game-updated', gameState);
+  }
 });
+
 
 const sendSystemMessage = async (lobbyCode: string, message: string): Promise<boolean> => {
   const chatMessage = await gameManager.sendMessage(lobbyCode, "", message, true);
@@ -117,13 +119,13 @@ io.on('connection', (socket) => {
       io.to(lobbyCode).emit('game-started', gameState);
       
       // Process AI turn if first player is AI
-      await gameManager.processAITurn(lobbyCode);
+      // await gameManager.processAITurn(lobbyCode);
     } catch (error) {
       socket.emit('error', error instanceof Error ? error.message : 'Failed to start game');
     }
   });
 
-  socket.on('roll-dice', async () => {
+  socket.on('play-card', async (data) => {
     try {
       const playerId = gameManager.getPlayerBySocket(socket.id);
       if (!playerId) {
@@ -149,21 +151,28 @@ io.on('connection', (socket) => {
         return;
       }
 
-      const result = await gameManager.rollDice(lobbyCode, playerId);
+      const gameState = await gameManager.playCard(lobbyCode, playerId, data.card);
 
-      if (result.gameState.gamePhase === 'ended') {
-        io.to(lobbyCode).emit('game-ended', result.gameState);
+      if (gameState.gamePhase === 'ended') {
+        io.to(lobbyCode).emit('game-ended', gameState);
         // Return to lobby after 5 seconds
         setTimeout(async () => {
           const updatedState = await gameManager.returnToLobby(lobbyCode!);
           io.to(lobbyCode!).emit('game-updated', updatedState);
         }, 5000);
       } else {
-        // Process AI turn for next player
-        await gameManager.processAITurn(lobbyCode);
+        io.to(lobbyCode).emit('game-updated', gameState);
+        // Process AI turn for next player if AI
+        const nextPlayer = gameState.players[gameState.currentPlayerIndex];
+        if (
+          gameState.gamePhase === 'playing' &&
+          nextPlayer?.isAI
+        ) {
+          await gameManager.processAITurn(lobbyCode);
+        }
       }
     } catch (error) {
-      socket.emit('error', error instanceof Error ? error.message : 'Failed to roll dice');
+      socket.emit('error', error instanceof Error ? error.message : 'Failed to play card');
     }
   });
 
@@ -330,13 +339,12 @@ setInterval(async () => {
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
-  console.log(`🎲 Brisk server running on port ${PORT}`);
+  console.log(`🃏 Brisk server running on port ${PORT}`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  db.close();
   server.close(() => {
     console.log('Server closed');
     process.exit(0);

@@ -1,11 +1,17 @@
+export type Suit = 'a' | 'b' | 'c' | 'd';
+
+export interface Card {
+  number: number; // 1-10
+  suit: Suit;
+}
+
 export interface Player {
   id: string;
   name: string;
   isHost: boolean;
-  isConnected: boolean;
   isAI: boolean;
   score: number;
-  lastRoll?: number;
+  hand?: Card[];
 }
 
 export interface ChatMessage {
@@ -17,6 +23,8 @@ export interface ChatMessage {
 }
 
 export interface GameState {
+  turnStartTimestamp?: number;
+  turnEndTimestamp?: number;
   id: string;
   lobbyCode: string;
   players: Player[];
@@ -27,6 +35,11 @@ export interface GameState {
   chat: ChatMessage[];
   winner?: Player;
   currentRound: number;
+  deck?: Card[];
+  playedCards?: { playerId: string; card: Card }[];
+  lastPlayedCards?: { playerId: string; card: Card }[];
+  lastCard?: Card;
+  lastRoundWinner?: string;
 }
 
 export interface LobbyCreatedPayload {
@@ -35,12 +48,11 @@ export interface LobbyCreatedPayload {
 }
 
 export interface SocketEvents {
-    "next-round": () => void;
   // Client to Server
   'join-lobby': (data: { lobbyCode: string; playerName: string }) => void;
   'create-lobby': (data: { playerName: string }) => void;
   'start-game': () => void;
-  'roll-dice': () => void;
+  'play-card': (data: { card: Card }) => void;
   'kick-player': (playerId: string) => void;
   'leave-lobby': () => void;
   'send-message': (message: string) => void;
@@ -52,7 +64,6 @@ export interface SocketEvents {
   'player-joined': (player: Player) => void;
   'player-left': (playerId: string) => void;
   'game-started': (gameState: GameState) => void;
-  'dice-rolled': (data: { playerId: string; roll: number }) => void;
   'game-ended': (gameState: GameState) => void;
   'player-kicked': (playerId: string) => void;
   'message-received': (message: ChatMessage) => void;
