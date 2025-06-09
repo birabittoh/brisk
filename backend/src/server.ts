@@ -39,6 +39,11 @@ gameManager.on('diceRolled', ({ lobbyCode, playerId, roll, gameState }) => {
   io.to(lobbyCode).emit('game-updated', gameState);
 });
 
+const sendSystemMessage = async (lobbyCode: string, message: string): Promise<boolean> => {
+  const chatMessage = await gameManager.sendMessage(lobbyCode, "", message, true);
+  return io.to(lobbyCode).emit('message-received', chatMessage);
+}
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   socket.on('create-lobby', async (data) => {
@@ -64,6 +69,10 @@ io.on('connection', (socket) => {
       
       const newPlayer = gameState.players[gameState.players.length - 1];
       socket.to(data.lobbyCode).emit('player-joined', newPlayer);
+
+      if (gameState.players.length > 0) {
+        await sendSystemMessage(data.lobbyCode, `${newPlayer.name} has joined the lobby.`);
+      }
     } catch (error) {
       if (typeof error === 'object' && error && (error as any).code === 'KICK_TIMEOUT') {
         socket.emit('player-kicked', '');
@@ -204,6 +213,21 @@ io.on('connection', (socket) => {
   });
 
   socket.on('leave-lobby', async () => {
+    // Get player name before leaving
+    const playerId = gameManager.getPlayerBySocket(socket.id);
+    let playerName = "";
+    let lobbyCode = "";
+    if (playerId) {
+      for (const [code, game] of gameManager['games'].entries()) {
+        if (game.players.some(p => p.id === playerId)) {
+          lobbyCode = code;
+          const player = game.players.find(p => p.id === playerId);
+          if (player) playerName = player.name;
+          break;
+        }
+      }
+    }
+
     const result = await gameManager.leaveGame(socket.id);
     
     if (result.lobbyCode) {
@@ -212,9 +236,12 @@ io.on('connection', (socket) => {
       if (result.gameState) {
         socket.to(result.lobbyCode).emit('game-updated', result.gameState);
         
-        const playerId = gameManager.getPlayerBySocket(socket.id);
         if (playerId) {
           socket.to(result.lobbyCode).emit('player-left', playerId);
+
+          if (result.gameState.players.length > 0 && playerName) {
+            await sendSystemMessage(result.lobbyCode, `${playerName} has left the lobby.`);
+          }
         }
       }
     }
@@ -254,14 +281,32 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async () => {
+    // Get player name before leaving
+    const playerId = gameManager.getPlayerBySocket(socket.id);
+    let playerName = "";
+    let lobbyCode = "";
+    if (playerId) {
+      for (const [code, game] of gameManager['games'].entries()) {
+        if (game.players.some(p => p.id === playerId)) {
+          lobbyCode = code;
+          const player = game.players.find(p => p.id === playerId);
+          if (player) playerName = player.name;
+          break;
+        }
+      }
+    }
+
     const result = await gameManager.leaveGame(socket.id);
     
     if (result.lobbyCode && result.gameState) {
       socket.to(result.lobbyCode).emit('game-updated', result.gameState);
       
-      const playerId = gameManager.getPlayerBySocket(socket.id);
       if (playerId) {
         socket.to(result.lobbyCode).emit('player-left', playerId);
+
+        if (result.gameState.players.length > 0 && playerName) {
+          await sendSystemMessage(result.lobbyCode, `${playerName} has left the lobby.`);
+        }
       }
 
       // If it's now an AI's turn, process the AI turn

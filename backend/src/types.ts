@@ -2,7 +2,6 @@ export interface Player {
   id: string;
   name: string;
   isHost: boolean;
-  isConnected: boolean;
   isAI: boolean;
   score: number;
   lastRoll?: number;

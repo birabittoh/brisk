@@ -82,14 +82,13 @@ export class Database {
     for (let i = 0; i < gameState.players.length; i++) {
       const player = gameState.players[i];
       await this.dbRun(`
-        INSERT INTO players (id, game_id, name, is_host, is_connected, is_ai, score, last_roll, join_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO players (id, game_id, name, is_host, is_ai, score, last_roll, join_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         player.id,
         gameState.id,
         player.name,
         player.isHost,
-        player.isConnected,
         player.isAI,
         player.score,
         player.lastRoll || null,
@@ -121,7 +120,6 @@ export class Database {
       id: row.id,
       name: row.name,
       isHost: row.is_host,
-      isConnected: row.is_connected,
       isAI: row.is_ai,
       score: row.score,
       lastRoll: row.last_roll || undefined

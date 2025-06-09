@@ -46,18 +46,33 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
   };
 
   const copyLobbyCode = (): void => {
-    if (gameState?.lobbyCode) {
-      navigator.clipboard.writeText(window.location.href);
-      // Simple feedback - you could enhance this with a toast notification
-      const button = document.getElementById('copy-code-btn');
-      if (button) {
-        const originalText = button.textContent;
-        button.textContent = '✅ Copied!';
-        setTimeout(() => {
-          button.textContent = originalText;
-        }, 2000);
-      }
+    // Store a reference to the button
+    const button = document.getElementById('copy-code-btn');
+    if (!button) return;
+    
+    // Store original text if not already saved
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent || '';
     }
+    
+    // Clear any existing timeout stored on the button element
+    if (button.dataset.timeoutId) {
+      clearTimeout(parseInt(button.dataset.timeoutId));
+    }
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(window.location.href);
+    
+    // Update the button text
+    button.textContent = '✅ Copied!';
+    
+    // Set new timeout and store its ID
+    const timeoutId = setTimeout(() => {
+      button.textContent = button.dataset.originalText ?? '';
+      delete button.dataset.timeoutId;
+    }, 1000);
+    
+    button.dataset.timeoutId = timeoutId.toString();
   };
 
   return (
@@ -70,14 +85,14 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
                 <h1 className="text-4xl font-bold text-gray-800 mb-4">🎲 BRISK</h1>
                 <div className="bg-gray-100 rounded-xl p-4 mb-6">
                   <div className="flex items-center justify-center space-x-4">
-                    <span className="text-lg font-medium text-gray-700">Lobby code:</span>
+                    <span className="text-lg font-medium text-gray-700">Code:</span>
                     <span className="text-2xl font-mono font-bold text-blue-600">{gameState?.lobbyCode ?? '-'}</span>
                     <button
                       id="copy-code-btn"
                       onClick={copyLobbyCode}
-                      className="bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                      className="bg-blue-500 px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors text-sm text-white"
                     >
-                      📋 Copy link
+                      📋 Copy
                     </button>
                   </div>
                 </div>
@@ -105,9 +120,6 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
                             <span className="font-medium text-gray-800">
                               {player.name}
                             </span>
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            {player.isConnected ? '🟢 Online' : '🔴 Offline'}
                           </div>
                         </div>
                       </div>

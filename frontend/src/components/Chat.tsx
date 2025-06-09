@@ -38,7 +38,7 @@ const Chat: React.FC<ChatProps> = ({ isMinimized, onToggleMinimize }) => {
   return (
     <div className={`bg-white rounded-xl shadow-lg transition-all duration-300 ${
       isMinimized ? 'h-12' : 'h-80'
-    } w-full min-w-[350px]`}>
+    } w-full min-w-[250px]`}>
       <div
         className="flex items-center justify-between p-3 bg-blue-500 text-white rounded-t-xl cursor-pointer"
         onClick={onToggleMinimize}
@@ -66,27 +66,37 @@ const Chat: React.FC<ChatProps> = ({ isMinimized, onToggleMinimize }) => {
                 <p>No messages yet. Start the conversation!</p>
               </div>
             ) : (
-              gameState.chat.map((msg: ChatMessage) => (
-                <div
-                  key={msg.id}
-                  className={`flex w-full ${msg.playerId === currentPlayerUuid ? 'justify-end' : 'justify-start'}`}
-                >
+              gameState.chat.map((msg: ChatMessage) =>
+                msg.playerId === "" ? (
                   <div
-                    className={`max-w-xs px-3 py-2 rounded-2xl shadow ${
-                      msg.playerId === currentPlayerUuid
-                        ? 'bg-blue-600 text-white rounded-br-none'
-                        : 'bg-gray-200 text-gray-800 rounded-bl-none'
-                    }`}
+                    key={msg.id}
+                    className="flex w-full justify-center"
                   >
-                    <div className="text-xs opacity-75 mb-1 text-right">
-                      {msg.playerId === currentPlayerUuid
-                        ? `You • ${formatTime(msg.timestamp)}`
-                        : `${msg.playerName} • ${formatTime(msg.timestamp)}`}
+                    <div className="text-xs italic text-gray-500 text-center w-full" style={{ fontSize: '0.85rem' }}>
+                      {msg.message}
                     </div>
-                    <div>{msg.message}</div>
                   </div>
-                </div>
-              ))
+                ) : (
+                  <div
+                    key={msg.id}
+                    className={`flex w-full ${msg.playerId === currentPlayerUuid ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-xs px-3 py-2 rounded-2xl shadow ${
+                        msg.playerId === currentPlayerUuid
+                          ? 'bg-blue-600 text-white rounded-br-none'
+                          : 'bg-gray-200 text-gray-800 rounded-bl-none'
+                      }`}
+                    >
+                      <div className="text-xs opacity-75 mb-1 text-right">
+                        {msg.playerId === currentPlayerUuid ? `You` : `${msg.playerName}` +
+                        ` • ${formatTime(msg.timestamp)}`}
+                      </div>
+                      <div>{msg.message}</div>
+                    </div>
+                  </div>
+                )
+              )
             )}
             <div ref={messagesEndRef} />
           </div>
@@ -101,13 +111,6 @@ const Chat: React.FC<ChatProps> = ({ isMinimized, onToggleMinimize }) => {
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                 maxLength={200}
               />
-              <button
-                type="submit"
-                disabled={!message.trim()}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                📤
-              </button>
             </div>
           </form>
         </>

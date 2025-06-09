@@ -45,7 +45,6 @@ export class GameManager extends EventEmitter {
       id: playerId,
       name: playerName,
       isHost: true,
-      isConnected: true,
       isAI: false,
       score: 0
     };
@@ -106,7 +105,6 @@ export class GameManager extends EventEmitter {
       const player = gameState.players.find(p => p.name === playerName + 'bot' && p.isAI);
       if (player) {
         // Reconnect existing AI player
-        player.isConnected = true;
         player.isAI = false;
         player.name = player.name.replace('bot', '');
         this.playerSockets.set(player.id, socketId);
@@ -123,7 +121,6 @@ export class GameManager extends EventEmitter {
       id: playerId,
       name: playerName,
       isHost: false,
-      isConnected: true,
       isAI: false,
       score: 0
     };
@@ -146,7 +143,6 @@ export class GameManager extends EventEmitter {
 
     const player = gameState.players.find(p => p.id === playerId);
     if (player) {
-      player.isConnected = true;
       if (player.isAI && player.name.endsWith('bot')) {
         player.isAI = false;
         player.name = player.name.replace('bot', '');
@@ -334,7 +330,6 @@ export class GameManager extends EventEmitter {
 
     if (foundGame.gamePhase === 'playing') {
       // Replace with AI during game
-      player.isConnected = false;
       player.isAI = true;
       player.name = player.name + 'bot';
     } else {
@@ -342,18 +337,27 @@ export class GameManager extends EventEmitter {
       const playerIndex = foundGame.players.findIndex(p => p.id === playerId);
       foundGame.players.splice(playerIndex, 1);
 
-      // If host left, assign new host
-      if (player.isHost && foundGame.players.length > 0) {
-        foundGame.players[0].isHost = true;
+      if (player.isHost) {
+        const humanPlayers = foundGame.players.filter(p => !p.isAI);
+        if (humanPlayers.length > 0) {
+          const newHost = humanPlayers[0];
+          newHost.isHost = true;
+          for (const p of foundGame.players) {
+            if (p.id !== newHost.id) {
+              p.isHost = false;
+            }
+          }
+        }
       }
+      
     }
 
     // Clean up socket mappings
     this.playerSockets.delete(playerId);
     this.socketPlayers.delete(socketId);
 
-    // Delete game if no players left
-    if (foundGame.players.length === 0) {
+    // Delete game if no real players left (either empty or only AI players)
+    if (foundGame.players.length === 0 || foundGame.players.every(p => p.isAI)) {
       this.games.delete(lobbyCode);
       await this.db.deleteGame(foundGame.id);
       return { gameState: null, lobbyCode };
@@ -364,21 +368,21 @@ export class GameManager extends EventEmitter {
     return { gameState: foundGame, lobbyCode };
   }
 
-  async sendMessage(lobbyCode: string, playerId: string, message: string): Promise<ChatMessage> {
+  async sendMessage(lobbyCode: string, playerId: string, message: string, isSystem: boolean = false): Promise<ChatMessage> {
     const gameState = this.games.get(lobbyCode);
     if (!gameState) {
       throw new Error('Game not found');
     }
 
     const player = gameState.players.find(p => p.id === playerId);
-    if (!player) {
+    if (!isSystem && !player) {
       throw new Error('Player not found');
     }
 
     const chatMessage: ChatMessage = {
       id: uuidv4(),
       playerId,
-      playerName: player.name,
+      playerName: player?.name || 'System',
       message: message.trim(),
       timestamp: Date.now()
     };

@@ -74,7 +74,6 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
 
   const getPlayerStatusEmoji = (player: Player): string => {
     if (player.isAI) return '🤖';
-    if (!player.isConnected) return '🔴';
     return '🟢';
   };
 
