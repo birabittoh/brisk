@@ -3,6 +3,8 @@ import { GameState, Player, ChatMessage, Card } from './types';
 import { Database } from './database';
 import { EventEmitter } from 'events';
 
+const turnTimeoutMS = 15000;
+
 const ITALIAN_SOCCER_PLAYERS = [
   'Rossi', 'Buffon', 'Totti', 'Baggio', 'Maldini', 'Pirlo', 'Del Piero',
   'Cannavaro', 'Gattuso', 'Insigne', 'Immobile', 'Verratti', 'Donnarumma',
@@ -25,7 +27,6 @@ export class GameManager extends EventEmitter {
   }
 
   private setTurnTimeout(lobbyCode: string) {
-    const timeoutMS = 15000;
     // Clear any existing timeout
     if (this.turnTimeouts.has(lobbyCode)) {
       clearTimeout(this.turnTimeouts.get(lobbyCode)!);
@@ -58,7 +59,7 @@ export class GameManager extends EventEmitter {
         } catch (err) {
           console.error('Auto-play error:', err);
         }
-      }, timeoutMS)
+      }, turnTimeoutMS)
     );
   }
 
@@ -242,9 +243,8 @@ export class GameManager extends EventEmitter {
     gameState.gamePhase = 'playing';
     gameState.currentPlayerIndex = 0;
     gameState.currentRound = 1;
-    const timeoutMS = 5000;
     gameState.turnStartTimestamp = Date.now();
-    gameState.turnEndTimestamp = gameState.turnStartTimestamp + timeoutMS;
+    gameState.turnEndTimestamp = gameState.turnStartTimestamp + turnTimeoutMS;
     this.setTurnTimeout(lobbyCode);
 
     // Reset scores, hands, and wonCards
@@ -256,7 +256,7 @@ export class GameManager extends EventEmitter {
 
     // Create and shuffle deck
     const suits: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
-    let deck: { number: number; suit: 'a' | 'b' | 'c' | 'd' }[] = [];
+    let deck: Card[] = [];
     for (const suit of suits) {
       for (let number = 1; number <= 10; number++) {
         deck.push({ number, suit });
@@ -295,7 +295,7 @@ export class GameManager extends EventEmitter {
 
   // Card play logic will be implemented here.
 
-  async playCard(lobbyCode: string, playerId: string, card: { number: number; suit: 'a' | 'b' | 'c' | 'd' }): Promise<GameState> {
+  async playCard(lobbyCode: string, playerId: string, card: Card): Promise<GameState> {
     const gameState = this.games.get(lobbyCode);
     if (!gameState || gameState.gamePhase !== 'playing') {
       throw new Error('Game not found or not in progress');
@@ -328,7 +328,7 @@ export class GameManager extends EventEmitter {
     // If all players have played, resolve round
     if (gameState.playedCards.length === gameState.players.length) {
       // --- BRISCOLA/DOMINANT SUIT LOGIC ---
-      let winner: { playerId: string; card: { number: number; suit: string } } | undefined = undefined;
+      let winner: { playerId: string; card: Card } | undefined = undefined;
       let dominantSuit: string | undefined = undefined;
       const briscolaSuit = gameState.lastCard?.suit;
 
@@ -341,7 +341,7 @@ export class GameManager extends EventEmitter {
       }
 
       // Card value function
-      function getCardValue(card: { number: number; suit: string }) {
+      function getCardValue(card: Card) {
         if (card.number === 3) return 10;
         if (card.number === 1) return 11;
         if (card.number === 8) return 2;
@@ -407,9 +407,8 @@ export class GameManager extends EventEmitter {
       }
 
       // Set new turn start timestamp for next round
-      const timeoutMS = 5000;
       gameState.turnStartTimestamp = Date.now();
-      gameState.turnEndTimestamp = gameState.turnStartTimestamp + timeoutMS;
+      gameState.turnEndTimestamp = gameState.turnStartTimestamp + turnTimeoutMS;
 
       // Check if some players have empty hands (game end)
       const allEmpty = gameState.players.some(p => !p.hand || p.hand.length === 0);
@@ -426,9 +425,8 @@ export class GameManager extends EventEmitter {
       }
     } else {
       // Set new turn start timestamp for next player
-      const timeoutMS = 5000;
       gameState.turnStartTimestamp = Date.now();
-      gameState.turnEndTimestamp = gameState.turnStartTimestamp + timeoutMS;
+      gameState.turnEndTimestamp = gameState.turnStartTimestamp + turnTimeoutMS;
       this.setTurnTimeout(lobbyCode);
     }
 

@@ -1,6 +1,6 @@
-# 🃏 Brisk - Frontend
+# 🃏 Brisk
 
-A responsive React frontend for the Brisk multiplayer briscola game.
+A multiplayer briscola game.
 
 ## Technology Stack
 
@@ -40,7 +40,7 @@ npm run build
 ### Build and run with Docker:
 
 ```bash
-# Run the entire application stack
+cp ./frontend/.env.example ./frontend/.env
 docker compose up -d
 ```
 
