@@ -1,0 +1,67 @@
+[
+    {
+        "name":  "bergamo",
+        "width":  320,
+        "height":  576
+    },
+    {
+        "name":  "bologna",
+        "width":  304,
+        "height":  576
+    },
+    {
+        "name":  "genova",
+        "width":  368,
+        "height":  576
+    },
+    {
+        "name":  "milano",
+        "width":  320,
+        "height":  576
+    },
+    {
+        "name":  "napoli",
+        "width":  368,
+        "height":  576
+    },
+    {
+        "name":  "piacenza",
+        "width":  336,
+        "height":  576
+    },
+    {
+        "name":  "piemonte",
+        "width":  352,
+        "height":  576
+    },
+    {
+        "name":  "romagna",
+        "width":  336,
+        "height":  576
+    },
+    {
+        "name":  "sardegna",
+        "width":  368,
+        "height":  576
+    },
+    {
+        "name":  "sicilia",
+        "width":  368,
+        "height":  576
+    },
+    {
+        "name":  "trento",
+        "width":  336,
+        "height":  576
+    },
+    {
+        "name":  "treviso",
+        "width":  320,
+        "height":  576
+    },
+    {
+        "name":  "trieste",
+        "width":  320,
+        "height":  576
+    }
+]

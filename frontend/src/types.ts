@@ -1,8 +1,20 @@
 export type Suit = 'a' | 'b' | 'c' | 'd';
 
+export interface Style {
+  name: string;
+  width: number;
+  height: number;
+}
+
 export interface Card {
-  number: number; // 1-10
+  number: number;
   suit: Suit;
+}
+
+export interface CardImage {
+  src: string;
+  card: Card;
+  style: Style;
 }
 
 export interface Player {
