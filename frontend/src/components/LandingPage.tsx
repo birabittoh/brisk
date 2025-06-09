@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { GameState } from '../types';
+import { LobbyCreatedPayload } from '../types';
 
 const italianSoccerPlayers = [
   "Baggio", "Maldini", "Baresi", "Del Piero", "Totti", 
@@ -84,38 +84,31 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
       const params = new URLSearchParams(window.location.search);
       params.set('c', code.trim().toUpperCase());
       window.history.replaceState({}, document.title, `${window.location.pathname}?${params.toString()}`);
-      console.log(code);
     }
   };
 
   useEffect(() => {
     if (!socket) return;
 
-    const handleLobbyCreated = (payload: { gameState: GameState; playerUuid: string }): void => {
+    const handleLobbyCreated = (payload: LobbyCreatedPayload): void => {
       const { gameState } = payload;
-      console.log("handleLobbyCreated: received gameState", gameState);
       setIsCreating(false);
       const createdLobbyCode = gameState?.lobbyCode;
-      console.log("handleLobbyCreated: createdLobbyCode", createdLobbyCode);
       if ((!createdLobbyCode || typeof createdLobbyCode !== "string")) {
-        console.error("handleLobbyCreated: Invalid lobby code received", createdLobbyCode);
         if (typeof setError === "function") {
-          console.log("handleLobbyCreated: setting error");
           setError("Failed to create lobby: Invalid lobby code received.");
         }
         return;
       }
-      console.log("handleLobbyCreated: updating query string with", createdLobbyCode);
       setLobbyCode(createdLobbyCode);
       updateQueryWithLobbyCode(createdLobbyCode);
-      console.log("handleLobbyCreated: after updateQueryWithLobbyCode");
       onPageChange('lobby');
     };
 
-    socket.on('lobby-created', handleLobbyCreated as any);
+    socket.on('lobby-created', handleLobbyCreated);
 
     return () => {
-      socket.off('lobby-created', handleLobbyCreated as any);
+      socket.off('lobby-created', handleLobbyCreated);
     };
   }, [socket, onPageChange]);
 
@@ -218,7 +211,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
                   Creating...
                 </span>
               ) : (
-                '🎮 New Game'
+                '🎮 New game'
               )}
             </button>
           </div>
@@ -259,7 +252,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
               ) : kickTimeoutMs > 0 && kickCountdown > 0 ? (
                 `⏳ Wait ${kickCountdown}s`
               ) : (
-                '🚪 Join Game'
+                '🚪 Join game'
               )}
             </button>
           </div>

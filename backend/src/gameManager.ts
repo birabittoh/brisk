@@ -254,7 +254,6 @@ export class GameManager extends EventEmitter {
       // AI rolls after a short delay
       setTimeout(async () => {
         try {
-          console.log(`AI ${currentPlayer.id} rolling dice...`);
           await this.rollDice(lobbyCode, currentPlayer.id);
         } catch (error) {
           console.error('AI turn error:', error);

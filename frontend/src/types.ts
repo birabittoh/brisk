@@ -29,6 +29,11 @@ export interface GameState {
   currentRound: number;
 }
 
+export interface LobbyCreatedPayload {
+  gameState: GameState;
+  playerUuid: string;
+}
+
 export interface SocketEvents {
     "next-round": () => void;
   // Client to Server
@@ -41,8 +46,8 @@ export interface SocketEvents {
   'send-message': (message: string) => void;
   
   // Server to Client
-  'lobby-joined': (gameState: GameState) => void;
-  'lobby-created': (gameState: GameState) => void;
+  'lobby-joined': (payload: LobbyCreatedPayload) => void;
+  'lobby-created': (payload: LobbyCreatedPayload) => void;
   'game-updated': (gameState: GameState) => void;
   'player-joined': (player: Player) => void;
   'player-left': (playerId: string) => void;

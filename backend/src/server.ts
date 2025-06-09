@@ -41,8 +41,6 @@ gameManager.on('diceRolled', ({ lobbyCode, playerId, roll, gameState }) => {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('Player connected:', socket.id);
-
   socket.on('create-lobby', async (data) => {
     try {
       const gameState = await gameManager.createLobby(data.playerName, socket.id);
@@ -68,7 +66,6 @@ io.on('connection', (socket) => {
       socket.to(data.lobbyCode).emit('player-joined', newPlayer);
     } catch (error) {
       if (typeof error === 'object' && error && (error as any).code === 'KICK_TIMEOUT') {
-        console.log('[DEBUG] Emitting player-kicked to', socket.id);
         socket.emit('player-kicked', '');
         socket.emit('error', {
           type: 'kick-timeout',
@@ -162,7 +159,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('kick-player', async (targetPlayerId) => {
-    console.log('[DEBUG] kick-player event received for targetPlayerId:', targetPlayerId, 'from', socket.id);
     try {
       const playerId = gameManager.getPlayerBySocket(socket.id);
       if (!playerId) {
@@ -194,7 +190,6 @@ io.on('connection', (socket) => {
         const targetSocket = io.sockets.sockets.get(targetSocketId);
         if (targetSocket) {
           targetSocket.leave(lobbyCode);
-          console.log('[DEBUG] Emitting player-kicked to', targetSocket.id);
           targetSocket.emit('player-kicked', '');
         }
       }
@@ -259,8 +254,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async () => {
-    console.log('Player disconnected:', socket.id);
-    
     const result = await gameManager.leaveGame(socket.id);
     
     if (result.lobbyCode && result.gameState) {

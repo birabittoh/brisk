@@ -92,14 +92,14 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                   {gameState.winner.name} Wins!
                 </h2>
                 <p className="text-yellow-700">
-                  Final Score: {gameState.winner.score} points
+                  Final score: {gameState.winner.score} points
                 </p>
               </div>
             )}
           </div>
 
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Final Scores:</h3>
+            <h3 className="text-lg font-semibold text-gray-700 mb-3">Final scores:</h3>
             <div className="space-y-2">
               {gameState?.players
                 ?.sort((a, b) => b.score - a.score)

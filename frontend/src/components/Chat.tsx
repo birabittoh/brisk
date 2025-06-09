@@ -38,7 +38,7 @@ const Chat: React.FC<ChatProps> = ({ isMinimized, onToggleMinimize }) => {
   return (
     <div className={`bg-white rounded-xl shadow-lg transition-all duration-300 ${
       isMinimized ? 'h-12' : 'h-80'
-    }`}>
+    } w-full min-w-[350px]`}>
       <div
         className="flex items-center justify-between p-3 bg-blue-500 text-white rounded-t-xl cursor-pointer"
         onClick={onToggleMinimize}

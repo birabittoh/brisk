@@ -47,7 +47,7 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
 
   const copyLobbyCode = (): void => {
     if (gameState?.lobbyCode) {
-      navigator.clipboard.writeText(gameState.lobbyCode);
+      navigator.clipboard.writeText(window.location.href);
       // Simple feedback - you could enhance this with a toast notification
       const button = document.getElementById('copy-code-btn');
       if (button) {
@@ -67,17 +67,17 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-3xl shadow-2xl p-8">
               <div className="text-center mb-8">
-                <h1 className="text-4xl font-bold text-gray-800 mb-4">🎲 Game Lobby</h1>
+                <h1 className="text-4xl font-bold text-gray-800 mb-4">🎲 BRISK</h1>
                 <div className="bg-gray-100 rounded-xl p-4 mb-6">
                   <div className="flex items-center justify-center space-x-4">
-                    <span className="text-lg font-medium text-gray-700">Lobby Code:</span>
+                    <span className="text-lg font-medium text-gray-700">Lobby code:</span>
                     <span className="text-2xl font-mono font-bold text-blue-600">{gameState?.lobbyCode ?? '-'}</span>
                     <button
                       id="copy-code-btn"
                       onClick={copyLobbyCode}
                       className="bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors text-sm"
                     >
-                      📋 Copy
+                      📋 Copy link
                     </button>
                   </div>
                 </div>
@@ -141,13 +141,13 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
                     {(gameState?.players?.length ?? 0) < 2 ? (
                       '⏳ Waiting for more players...'
                     ) : (
-                      '🚀 Start Game'
+                      '🚀 Start game'
                     )}
                   </button>
                 )}
               </div>
               <div className="mt-6 text-center text-gray-500 text-sm">
-                <p>🎯 Game starts when the host clicks "Start Game"</p>
+                <p>🎯 Game starts when the host clicks "Start game"</p>
                 <p>🎲 Roll the highest dice to win points!</p>
               </div>
             </div>
