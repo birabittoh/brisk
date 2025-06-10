@@ -67,7 +67,8 @@ export interface SocketEvents {
   'send-message': (message: string) => void;
   'change-max-players': (maxPlayers: number) => void;
   'change-speed': (speed: SpeedOption) => void;
-  
+  'add-bot': () => void;
+
   // Server to Client
   'lobby-joined': (payload: LobbyCreatedPayload) => void;
   'lobby-created': (payload: LobbyCreatedPayload) => void;

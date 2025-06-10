@@ -4,6 +4,7 @@ import { Player, Card, GameState } from '../types';
 import Chat from './Chat';
 import { renderCardImage } from '../common';
 import { PreferencesModal } from './PreferencesModal';
+import GradientButton from './GradientButton';
 
 interface GamePageProps {
   onPageChange: (page: 'landing' | 'lobby' | 'game') => void;
@@ -97,52 +98,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
 
   // Leave game and return to lobby
   const handleReturnToLobby = (): void => {
-    if (socket) {
-      socket.emit('leave-lobby');
-    }
-    // Clear game state to avoid stale/mixed player data
-    if (typeof window !== "undefined") {
-      // @ts-ignore
-      if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
-        // do nothing
-      }
-    }
-    // Try to clear gameState if possible
-    if (typeof window !== "undefined" && window.dispatchEvent) {
-      window.dispatchEvent(new Event("clearGameState"));
-    }
     onPageChange('lobby');
-  };
-
-  const getCardValue = (card: Card, gameState: GameState | null): number => {
-    if (!gameState?.lastCard || !gameState.playedCards) return card.number;
-    const firstSuitInRound = gameState.playedCards[0]?.card.suit;
-    const briscolaSuit = gameState?.lastCard.suit;
-
-    const playedCards = gameState.playedCards.map(c => c.card).concat(card);;
-
-    const dominantSuit = firstSuitInRound ?
-      (playedCards.some(pc => pc.suit === briscolaSuit) ? briscolaSuit : firstSuitInRound) :
-      briscolaSuit;
-
-    if (card.suit !== dominantSuit) {
-      return 0;
-    }
-
-    switch (card.number) {
-      case 1: // Ace
-        return 11;
-      case 3: // Three
-        return 10;
-      case 8: // Queen
-        return 2;
-      case 9: // Knight
-        return 3;
-      case 10: // King
-        return 4;
-      default:
-        return 0;
-    }
   };
 
   const getPlayerStatusEmoji = (player: Player): string => {
@@ -195,12 +151,13 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
             </div>
           </div>
 
-          <button
+          <GradientButton
             onClick={handleReturnToLobby}
-            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105"
+            color="blue"
+            fullWidth
           >
             🏠 Return to lobby
-          </button>
+          </GradientButton>
 
           <p className="text-sm text-gray-500 mt-4">
             Returning to lobby automatically in a few seconds...
@@ -260,7 +217,6 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                           )}
                         </div>
                         <div className="flex justify-center items-center text-4xl mt-2">{renderCardImage(pc.card, cardStyle)}</div>
-                        <div className="text-sm text-gray-600 mt-1">Value: {getCardValue(pc.card, gameState)}</div>
                       </div>
                     );
                   })}
@@ -378,18 +334,18 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
         {/* Game Controls */}
         <div className="mt-6 text-center flex justify-center">
           <div className="flex flex-row gap-4">
-            <button
+            <GradientButton
               onClick={() => setIsPreferencesOpen(true)}
-              className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-gray-600 hover:to-gray-700 transition-all transform hover:scale-105"
+              color="gray"
             >
               ⚙️ Preferences
-            </button>
-            <button
+            </GradientButton>
+            <GradientButton
               onClick={handleLeaveGame}
-              className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-red-600 hover:to-red-700 transition-all transform hover:scale-105"
+              color="red"
             >
-              🚪 Leave Game
-            </button>
+              🚪 Leave game
+            </GradientButton>
           </div>
         </div>
         <PreferencesModal

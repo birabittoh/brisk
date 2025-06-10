@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { LobbyCreatedPayload } from '../types';
 import { suitMap } from '../common';
+import GradientButton from './GradientButton';
 
 const italianSoccerPlayers = [
   "Baggio", "Maldini", "Baresi", "Del Piero", "Totti", 
@@ -214,10 +215,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
           </div>
 
           <div>
-            <button
+            <GradientButton
               onClick={handleCreateLobby}
               disabled={!playerName.trim() || isCreating || isJoining}
-              className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              color="green"
+              fullWidth
             >
               {isCreating ? (
                 <span className="flex items-center justify-center">
@@ -227,7 +229,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
               ) : (
                 '🎮 New game'
               )}
-            </button>
+            </GradientButton>
           </div>
 
           <div>
@@ -249,7 +251,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
           </div>
 
           <div>
-            <button
+            <GradientButton
               onClick={handleJoinLobby}
               disabled={
                 !playerName.trim() ||
@@ -258,7 +260,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
                 isJoining ||
                 kickTimeoutMs > 0
               }
-              className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              color="blue"
+              fullWidth
             >
               {isJoining ? (
                 <span className="flex items-center justify-center">
@@ -270,7 +273,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onPageChange }) => {
               ) : (
                 '🚪 Join game'
               )}
-            </button>
+            </GradientButton>
           </div>
 
           {(error && !(kickTimeoutMs > 0 && kickCountdown > 0)) && (

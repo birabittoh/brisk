@@ -189,24 +189,27 @@ io.on('connection', (socket) => {
 
       const gameState = await gameManager.playCard(lobbyCode, playerId, data.card);
 
-      if (gameState.gamePhase === 'ended') {
-        io.to(lobbyCode).emit('game-ended', gameState);
-        // Return to lobby after 5 seconds
-        setTimeout(async () => {
-          const updatedState = await gameManager.returnToLobby(lobbyCode!);
-          io.to(lobbyCode!).emit('game-updated', updatedState);
-        }, 5000);
-      } else {
-        io.to(lobbyCode).emit('game-updated', gameState);
-        // Process AI turn for next player if AI
-        const nextPlayer = gameState.players[gameState.currentPlayerIndex];
-        if (
-          gameState.gamePhase === 'playing' &&
-          nextPlayer?.isAI
-        ) {
-          await gameManager.processAITurn(lobbyCode);
-        }
-      }
+if (gameState.gamePhase === 'ended') {
+  io.to(lobbyCode).emit('game-ended', gameState);
+  // Return to lobby after 5 seconds
+  setTimeout(async () => {
+    const stillExists = !!gameManager.getGame(lobbyCode!);
+    if (stillExists) {
+      const updatedState = await gameManager.returnToLobby(lobbyCode!);
+      io.to(lobbyCode!).emit('game-updated', updatedState);
+    }
+  }, 5000);
+} else {
+  io.to(lobbyCode).emit('game-updated', gameState);
+  // Process AI turn for next player if AI
+  const nextPlayer = gameState.players[gameState.currentPlayerIndex];
+  if (
+    gameState.gamePhase === 'playing' &&
+    nextPlayer?.isAI
+  ) {
+    await gameManager.processAITurn(lobbyCode);
+  }
+}
     } catch (error) {
       socket.emit('error', error instanceof Error ? error.message : 'Failed to play card');
     }
@@ -348,6 +351,25 @@ io.on('connection', (socket) => {
       io.to(lobbyCode).emit('game-updated', foundGame);
     } catch (error) {
       socket.emit('error', error instanceof Error ? error.message : 'Failed to update max players');
+    }
+  });
+
+  socket.on('add-bot', async () => {
+    try {
+      const { playerId, lobbyCode, foundGame } = findPlayerAndGame(socket);
+      const player = foundGame.players.find(p => p.id === playerId);
+      if (!player?.isHost) {
+        socket.emit('error', 'Only the host can add bots');
+        return;
+      }
+      if (foundGame.players.length >= foundGame.maxPlayers) {
+        socket.emit('error', 'Lobby is full');
+        return;
+      }
+      const updatedGame = await gameManager.addBotToLobby(lobbyCode);
+      io.to(lobbyCode).emit('game-updated', updatedGame);
+    } catch (error) {
+      socket.emit('error', error instanceof Error ? error.message : 'Failed to add bot');
     }
   });
 

@@ -3,6 +3,7 @@ import { useSocket } from '../context/SocketContext';
 import { Player, SpeedOption, speedOptions } from '../types';
 import Chat from './Chat';
 import { PreferencesModal } from './PreferencesModal';
+import GradientButton from './GradientButton';
 
 interface LobbyPageProps {
   onPageChange: (page: 'landing' | 'lobby' | 'game') => void;
@@ -139,38 +140,43 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
                         </div>
                       </div>
                       {isHost && player.id !== currentPlayerUuid && (
-                        <button
+                        <GradientButton
                           onClick={() => handleKickPlayer(player.id)}
-                          className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm"
+                          color="red"
+                          className="px-3 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm"
                         >
                           🚫 Kick
-                        </button>
-                      )}
-                      {player.id === currentPlayerUuid && (
-                        <button
-                          onClick={handleLeaveLobby}
-                          className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm"
-                        >
-                          🚪 Leave
-                        </button>
+                        </GradientButton>
                       )}
                     </div>
                   ))}
+                  {isHost && (gameState?.players?.length ?? 0) < (gameState?.maxPlayers ?? 0) && (
+                    <div
+                      className="flex items-center justify-between p-4 rounded-xl bg-gray-200 hover:bg-gray-300 cursor-pointer transition"
+                      onClick={() => socket.emit('add-bot')}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl text-gray-600">➕</span>
+                        <span className="font-medium text-gray-700">Add bot</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="space-y-4">
                 {isHost && (
-                  <button
+                  <GradientButton
                     onClick={handleStartGame}
                     disabled={(gameState?.players?.length ?? 0) < 2}
-                    className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    color="green"
+                    fullWidth
                   >
                     {(gameState?.players?.length ?? 0) < 2 ? (
                       '⏳ Waiting for more players...'
                     ) : (
                       '🚀 Start game'
                     )}
-                  </button>
+                  </GradientButton>
                 )}
               </div>
               <div className="mt-6 text-center text-gray-500 text-sm">
@@ -237,12 +243,20 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
         </div>
         {/* Preferences Button and Modal */}
         <div className="mt-6 text-center flex justify-center">
-          <button
-            onClick={() => setIsPreferencesOpen(true)}
-            className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-gray-600 hover:to-gray-700 transition-all transform hover:scale-105"
-          >
-            ⚙️ Preferences
-          </button>
+          <div className="flex flex-row gap-4">
+            <GradientButton
+              onClick={() => setIsPreferencesOpen(true)}
+              color="gray"
+            >
+              ⚙️ Preferences
+            </GradientButton>
+            <GradientButton
+              onClick={handleLeaveLobby}
+              color="red"
+            >
+              🚪 Leave lobby
+            </GradientButton>
+          </div>
         </div>
         <PreferencesModal
           playerId={currentPlayerUuid ?? ""}
