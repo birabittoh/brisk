@@ -65,10 +65,13 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
         </label>
         <div className="flex flex-wrap justify-center gap-2 mb-4 overflow-x-auto">
           {Object.keys(suitMap).map((suit) =>
-            renderCardImage(
-              { number: 1, suit: suit as Suit },
-              selectedStyle,
-              "min-h-[125px] h-[125px] w-auto md:h-40 lg:h-56 object-contain rounded shadow"
+            React.cloneElement(
+              renderCardImage(
+                { number: 1, suit: suit as Suit },
+                selectedStyle,
+                "min-h-[125px] h-[125px] w-auto md:h-40 lg:h-56 object-contain rounded shadow"
+              ),
+              { key: suit }
             )
           )}
         </div>

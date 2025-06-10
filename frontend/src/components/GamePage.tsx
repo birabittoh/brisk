@@ -333,7 +333,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
 
         {/* Game Controls */}
         <div className="mt-6 text-center flex justify-center">
-          <div className="flex flex-row gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-4 w-full justify-center">
             <GradientButton
               onClick={() => setIsPreferencesOpen(true)}
               color="gray"

@@ -191,16 +191,6 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
             <div className="bg-white rounded-3xl shadow-2xl p-6 mb-0">
               <h2 className="text-xl font-bold text-gray-800 mb-4">Settings</h2>
               <div className="flex flex-col gap-4">
-                {/* Teams Toggle */}
-                <div className="flex items-center justify-between">
-                  <label htmlFor="teams-toggle" className="font-medium text-gray-700">Teams</label>
-                  <input
-                    id="teams-toggle"
-                    type="checkbox"
-                    className="toggle-checkbox h-5 w-5"
-                    disabled={!isHost}
-                  />
-                </div>
                 {/* Speed Dropdown */}
                 <div className="flex items-center justify-between">
                   <label htmlFor="speed-select" className="font-medium text-gray-700">Speed</label>
@@ -221,16 +211,45 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
                 {/* Players Number Input */}
                 <div className="flex items-center justify-between">
                   <label htmlFor="players-input" className="font-medium text-gray-700">Max players</label>
-                  <input
-                    id="players-input"
-                    type="number"
-                    min={2}
-                    max={5}
-                    className="border rounded-lg px-2 py-1 w-20"
-                    disabled={!isHost}
-                    value={gameState?.maxPlayers ?? 5}
-                    onChange={handleChangePlayers}
-                  />
+                  <div className="flex items-center space-x-1">
+                    <button
+                      type="button"
+                      className="bg-gray-200 px-2 py-1 rounded-l-lg text-lg font-bold disabled:opacity-50"
+                      disabled={!isHost || (gameState?.maxPlayers ?? 2) <= 2 || (gameState?.maxPlayers ?? 2) <= (gameState?.players?.length ?? 0)}
+                      onClick={() => {
+                        const newMax = (gameState?.maxPlayers ?? 2) - 1;
+                        if (isHost && newMax >= 2 && newMax >= (gameState?.players?.length ?? 0)) {
+                          socket.emit('change-max-players', newMax);
+                        }
+                      }}
+                      aria-label="Decrease max players"
+                    >-</button>
+                    <input
+                      id="players-input"
+                      type="number"
+                      min={2}
+                      max={5}
+                      className="border rounded-none px-2 py-1 w-12 text-center"
+                      disabled
+                      value={gameState?.maxPlayers ?? 5}
+                      style={{ MozAppearance: 'textfield' }}
+                      inputMode="numeric"
+                      pattern="[2-5]"
+                      readOnly
+                    />
+                    <button
+                      type="button"
+                      className="bg-gray-200 px-2 py-1 rounded-r-lg text-lg font-bold disabled:opacity-50"
+                      disabled={!isHost || (gameState?.maxPlayers ?? 5) >= 5}
+                      onClick={() => {
+                        const newMax = (gameState?.maxPlayers ?? 5) + 1;
+                        if (isHost && newMax <= 5) {
+                          socket.emit('change-max-players', newMax);
+                        }
+                      }}
+                      aria-label="Increase max players"
+                    >+</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -243,7 +262,7 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
         </div>
         {/* Preferences Button and Modal */}
         <div className="mt-6 text-center flex justify-center">
-          <div className="flex flex-row gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-4 w-full justify-center">
             <GradientButton
               onClick={() => setIsPreferencesOpen(true)}
               color="gray"
