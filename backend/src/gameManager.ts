@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState, Player, ChatMessage, Card, speedMap, Suit } from './types';
-import { Database } from './database';
 import { EventEmitter } from 'events';
 import { computeChosenCard } from './ai';
 
@@ -29,13 +28,6 @@ export class GameManager extends EventEmitter {
   private socketPlayers: Map<string, string> = new Map();
   private kickedPlayers: Map<string, Map<string, number>> = new Map();
   private turnTimeouts: Map<string, NodeJS.Timeout> = new Map();
-  private db: Database;
-
-  constructor(db: Database) {
-    super();
-    this.db = db;
-    this.loadGamesFromDB();
-  }
 
   // Utility methods
   private getTurnTimeoutMS(gameState: GameState): number {
@@ -204,13 +196,12 @@ export class GameManager extends EventEmitter {
 
     this.games.set(lobbyCode, gameState);
     this.mapPlayerSocket(playerId, socketId);
-    await this.db.saveGame(gameState);
     
     return gameState;
   }
 
   async joinLobby(lobbyCode: string, playerName: string, socketId: string): Promise<GameState> {
-    const gameState = this.games.get(lobbyCode) || await this.db.loadGame(lobbyCode);
+    const gameState = this.games.get(lobbyCode);
     if (!gameState) throw new Error('Lobby not found');
 
     const cleanName = this.cleanPlayerName(playerName);
@@ -260,7 +251,6 @@ export class GameManager extends EventEmitter {
     this.mapPlayerSocket(aiPlayer.id, socketId);
     
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     return gameState;
   }
 
@@ -277,7 +267,6 @@ export class GameManager extends EventEmitter {
     gameState.players.push(newPlayer);
     this.mapPlayerSocket(playerId, socketId);
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     
     return gameState;
   }
@@ -360,7 +349,6 @@ export class GameManager extends EventEmitter {
     this.setTurnTimeout(lobbyCode);
     
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     
     return gameState;
   }
@@ -398,7 +386,6 @@ export class GameManager extends EventEmitter {
     }
 
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     return gameState;
   }
 
@@ -542,7 +529,6 @@ export class GameManager extends EventEmitter {
 
     gameState.players.push(newBot);
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     return gameState;
   }
 
@@ -583,7 +569,6 @@ export class GameManager extends EventEmitter {
     if (socketId) this.unmapPlayerSocket(targetPlayerId, socketId);
     
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     return gameState;
   }
 
@@ -665,7 +650,6 @@ export class GameManager extends EventEmitter {
     socketId: string
   ): Promise<{ gameState: GameState | null; lobbyCode: string | null }> {
     this.games.delete(lobbyCode);
-    await this.db.deleteGame(gameState.id, lobbyCode);
     this.unmapPlayerSocket(playerId, socketId);
     return { gameState: null, lobbyCode };
   }
@@ -684,7 +668,6 @@ export class GameManager extends EventEmitter {
     }
     
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     return { gameState, lobbyCode };
   }
 
@@ -709,7 +692,6 @@ export class GameManager extends EventEmitter {
       gameState.chat = gameState.chat.slice(-MAX_CHAT_MESSAGES);
     }
     
-    await this.db.saveChatMessage(chatMessage, gameState.id);
     this.games.set(lobbyCode, gameState);
     
     return chatMessage;
@@ -726,30 +708,10 @@ export class GameManager extends EventEmitter {
     gameState.players.forEach(p => p.hand = []);
     
     this.games.set(lobbyCode, gameState);
-    await this.db.saveGame(gameState);
     return gameState;
   }
 
   getGame(lobbyCode: string): GameState | undefined {
     return this.games.get(lobbyCode);
-  }
-
-  private async loadGamesFromDB(): Promise<void> {
-    try {
-      const savedGames = await this.db.loadAllGames();
-
-      for (const gameState of savedGames) {
-        this.games.set(gameState.lobbyCode, gameState);
-
-        // Resume turn timers for active games
-        if (gameState.gamePhase === 'playing') {
-          this.setTurnTimeout(gameState.lobbyCode);
-        }
-      }
-
-      console.log(`Loaded ${savedGames.length} games from database`);
-    } catch (error) {
-      console.error('Failed to load games from database:', error);
-    }
   }
 }

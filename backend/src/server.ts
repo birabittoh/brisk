@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
-import { Database } from './database';
 import { GameManager } from './gameManager';
 import { GameState, SocketEvents, speedOptions } from './types';
 
@@ -29,9 +28,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Initialize database and game manager
-const db = new Database();
-const gameManager = new GameManager(db);
+// Initialize game manager
+const gameManager = new GameManager();
 
 // Listen for game-updated events from GameManager and notify clients
 gameManager.on('game-updated', (gameState) => {
@@ -347,7 +345,6 @@ if (gameState.gamePhase === 'ended') {
       }
 
       foundGame.maxPlayers = maxPlayers;
-      await db.saveGame(foundGame);
       io.to(lobbyCode).emit('game-updated', foundGame);
     } catch (error) {
       socket.emit('error', error instanceof Error ? error.message : 'Failed to update max players');
@@ -393,7 +390,6 @@ if (gameState.gamePhase === 'ended') {
       }
 
       foundGame.speed = speed;
-      await db.saveGame(foundGame);
       io.to(lobbyCode).emit('game-updated', foundGame);
     } catch (error) {
       socket.emit('error', error instanceof Error ? error.message : 'Failed to update max players');
