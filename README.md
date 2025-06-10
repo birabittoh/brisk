@@ -2,20 +2,15 @@
 
 A multiplayer briscola game.
 
+Huge thanks to [cuperativa](https://github.com/giorgiobornia/cuperativa) for the card images.
+
 ## Technology Stack
 
 - **React 18** with TypeScript
 - **Socket.IO** for real-time communication
 - **Tailwind CSS** for styling
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 16+ and npm
-- Backend server running on port 5000
-
-### Installation
+## Setup (local)
 
 1. Install dependencies:
 ```bash
@@ -29,19 +24,17 @@ npm run dev
 
 The application will open at `http://localhost:5173`.
 
-### Building for Production
+You can also build for production:
 
 ```bash
 npm run build
 ```
 
-## Docker Setup
-
-### Build and run with Docker:
+## Setup (docker)
 
 ```bash
 cp ./frontend/.env.example ./frontend/.env
-docker compose up -d
+docker compose up -d --build
 ```
 
 ## License

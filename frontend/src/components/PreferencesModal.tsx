@@ -1,6 +1,8 @@
 // PreferencesModal.tsx
 import React, { useEffect, useState } from "react";
 import styles from "../styles.json";
+import { renderCardImage, suitMap } from "../common";
+import { Suit } from "../types";
 
 const styleNames = styles.map((s) => s.name);
 
@@ -39,36 +41,20 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       onClick={onClose}
     >
       <div
-        style={{
-          background: "#fff",
-          padding: 24,
-          borderRadius: 8,
-          minWidth: 300,
-        }}
+        className="bg-white rounded-3xl shadow-lg p-2 sm:p-4 md:p-6 min-w-0 w-full max-w-full sm:max-w-xs md:max-w-lg lg:max-w-2xl overflow-x-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2>Preferences</h2>
-        <label>
-          Favorite Card Style:
+        <h2 className="text-lg font-semibold mb-4">Preferences</h2>
+        <label className="flex items-center gap-2 mb-4">
+          <span>Card style:</span>
           <select
             value={selectedStyle}
             onChange={handleChange}
-            style={{ marginLeft: 8 }}
+            className="border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500"
           >
             {styleNames.map((style) => (
               <option key={style} value={style}>
@@ -77,8 +63,22 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
             ))}
           </select>
         </label>
-        <div style={{ marginTop: 24, textAlign: "right" }}>
-          <button onClick={onClose}>Close</button>
+        <div className="flex flex-wrap justify-center gap-2 mb-4 overflow-x-auto">
+          {Object.keys(suitMap).map((suit) =>
+            renderCardImage(
+              { number: 1, suit: suit as Suit },
+              selectedStyle,
+              "min-h-[125px] h-[125px] w-auto md:h-40 lg:h-56 object-contain rounded shadow"
+            )
+          )}
+        </div>
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

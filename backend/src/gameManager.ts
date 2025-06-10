@@ -1,9 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, Player, ChatMessage, Card } from './types';
+import { GameState, Player, ChatMessage, Card, speedMap } from './types';
 import { Database } from './database';
 import { EventEmitter } from 'events';
-
-const turnTimeoutMS = 15000;
 
 const ITALIAN_SOCCER_PLAYERS = [
   'Rossi', 'Buffon', 'Totti', 'Baggio', 'Maldini', 'Pirlo', 'Del Piero',
@@ -24,6 +22,10 @@ export class GameManager extends EventEmitter {
     super();
     this.db = db;
     this.loadGamesFromDB();
+  }
+
+  private getTurnTimeoutMS(gameState: GameState): number {
+    return speedMap[gameState.speed] || speedMap.normal;
   }
 
   private setTurnTimeout(lobbyCode: string) {
@@ -59,7 +61,7 @@ export class GameManager extends EventEmitter {
         } catch (err) {
           console.error('Auto-play error:', err);
         }
-      }, turnTimeoutMS)
+      }, this.getTurnTimeoutMS(gameState))
     );
   }
 
@@ -106,8 +108,8 @@ export class GameManager extends EventEmitter {
       players: [host],
       currentPlayerIndex: 0,
       gamePhase: 'lobby',
-      maxPlayers: 6,
-      pointsToWin: 10,
+      maxPlayers: 5,
+      speed: 'normal',
       chat: [],
       currentRound: 1
     };
@@ -152,18 +154,24 @@ export class GameManager extends EventEmitter {
       throw new Error('Lobby is full');
     }
 
+    // Prevent duplicate player names
+    if (gameState.players.some(p => p.name === playerName)) {
+      throw new Error('This player has already joined the lobby');
+    }
+
+    const AIplayer = gameState.players.find(p => p.name === playerName + 'bot' && p.isAI);
+    if (AIplayer) {
+      // Reconnect existing AI player
+      AIplayer.isAI = false;
+      AIplayer.name = AIplayer.name.replace('bot', '');
+      this.playerSockets.set(AIplayer.id, socketId);
+      this.socketPlayers.set(socketId, AIplayer.id);
+      this.games.set(lobbyCode, gameState);
+      await this.db.saveGame(gameState);
+      return gameState;
+    }
+
     if (gameState.gamePhase === 'playing') {
-      const player = gameState.players.find(p => p.name === playerName + 'bot' && p.isAI);
-      if (player) {
-        // Reconnect existing AI player
-        player.isAI = false;
-        player.name = player.name.replace('bot', '');
-        this.playerSockets.set(player.id, socketId);
-        this.socketPlayers.set(socketId, player.id);
-        this.games.set(lobbyCode, gameState);
-        await this.db.saveGame(gameState);
-        return gameState;
-      }
       throw new Error('Game already started, cannot join now');
     }
 
@@ -182,30 +190,6 @@ export class GameManager extends EventEmitter {
     this.socketPlayers.set(socketId, playerId);
 
     await this.db.saveGame(gameState);
-    return gameState;
-  }
-
-  async reconnectPlayer(lobbyCode: string, playerId: string, socketId: string): Promise<GameState | null> {
-    const gameState = this.games.get(lobbyCode) || await this.db.loadGame(lobbyCode);
-    
-    if (!gameState) {
-      return null;
-    }
-
-    const player = gameState.players.find(p => p.id === playerId);
-    if (player) {
-      if (player.isAI && player.name.endsWith('bot')) {
-        player.isAI = false;
-        player.name = player.name.replace('bot', '');
-      }
-      
-      this.playerSockets.set(playerId, socketId);
-      this.socketPlayers.set(socketId, playerId);
-      this.games.set(lobbyCode, gameState);
-      
-      await this.db.saveGame(gameState);
-    }
-
     return gameState;
   }
 
@@ -244,7 +228,7 @@ export class GameManager extends EventEmitter {
     gameState.currentPlayerIndex = 0;
     gameState.currentRound = 1;
     gameState.turnStartTimestamp = Date.now();
-    gameState.turnEndTimestamp = gameState.turnStartTimestamp + turnTimeoutMS;
+    gameState.turnEndTimestamp = gameState.turnStartTimestamp + this.getTurnTimeoutMS(gameState);
     this.setTurnTimeout(lobbyCode);
 
     // Reset scores, hands, and wonCards
@@ -324,6 +308,8 @@ export class GameManager extends EventEmitter {
 
     // Clear previous turn timeout
     this.clearTurnTimeout(lobbyCode);
+
+    const ttMS = this.getTurnTimeoutMS(gameState);
 
     // If all players have played, resolve round
     if (gameState.playedCards.length === gameState.players.length) {
@@ -408,7 +394,7 @@ export class GameManager extends EventEmitter {
 
       // Set new turn start timestamp for next round
       gameState.turnStartTimestamp = Date.now();
-      gameState.turnEndTimestamp = gameState.turnStartTimestamp + turnTimeoutMS;
+      gameState.turnEndTimestamp = gameState.turnStartTimestamp + ttMS + 3000; // Add 3 seconds for round resolution
 
       // Check if some players have empty hands (game end)
       const allEmpty = gameState.players.some(p => !p.hand || p.hand.length === 0);
@@ -426,7 +412,7 @@ export class GameManager extends EventEmitter {
     } else {
       // Set new turn start timestamp for next player
       gameState.turnStartTimestamp = Date.now();
-      gameState.turnEndTimestamp = gameState.turnStartTimestamp + turnTimeoutMS;
+      gameState.turnEndTimestamp = gameState.turnStartTimestamp + ttMS;
       this.setTurnTimeout(lobbyCode);
     }
 
@@ -530,8 +516,23 @@ export class GameManager extends EventEmitter {
 
     if (foundGame.gamePhase === 'playing') {
       // Replace with AI during game
+      const wasHost = player.isHost;
       player.isAI = true;
       player.name = player.name + 'bot';
+
+      // Assign new host if the leaving player was host
+      if (wasHost) {
+        const humanPlayers = foundGame.players.filter(p => !p.isAI && p.id !== playerId);
+        if (humanPlayers.length > 0) {
+          const newHost = humanPlayers[0];
+          newHost.isHost = true;
+          for (const p of foundGame.players) {
+            if (p.id !== newHost.id) {
+              p.isHost = false;
+            }
+          }
+        }
+      }
     } else {
       // Remove player from lobby
       const playerIndex = foundGame.players.findIndex(p => p.id === playerId);
@@ -559,7 +560,7 @@ export class GameManager extends EventEmitter {
     // Delete game if no real players left (either empty or only AI players)
     if (foundGame.players.length === 0 || foundGame.players.every(p => p.isAI)) {
       this.games.delete(lobbyCode);
-      await this.db.deleteGame(foundGame.id);
+      await this.db.deleteGame(foundGame.id, lobbyCode);
       return { gameState: null, lobbyCode };
     }
 
@@ -631,9 +632,5 @@ export class GameManager extends EventEmitter {
 
   getGame(lobbyCode: string): GameState | undefined {
     return this.games.get(lobbyCode);
-  }
-
-  async cleanup(): Promise<void> {
-    await this.db.cleanup();
   }
 }

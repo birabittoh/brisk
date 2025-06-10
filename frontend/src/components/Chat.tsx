@@ -10,15 +10,40 @@ interface ChatProps {
 const Chat: React.FC<ChatProps> = ({ isMinimized, onToggleMinimize }) => {
   const { socket, gameState, currentPlayerId, currentPlayerUuid } = useSocket();
   const [message, setMessage] = useState<string>('');
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const prevChatLength = useRef<number>(gameState?.chat.length ?? 0);
+  const prevIsMinimized = useRef<boolean>(isMinimized);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = (): void => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Track unread messages
   useEffect(() => {
-    scrollToBottom();
-  }, [gameState?.chat]);
+    if (!gameState) return;
+    // If chat is minimized and new non-system messages arrive, increment unread count (ignore messages sent by current user and system messages)
+    if (isMinimized && gameState.chat.length > prevChatLength.current) {
+      const newMessages = gameState.chat.slice(prevChatLength.current);
+      const newUnread = newMessages.filter(
+        (msg) => msg.playerId !== currentPlayerUuid && msg.playerId !== ""
+      ).length;
+      setUnreadCount((count) => count + newUnread);
+    }
+    // If chat is opened, reset unread count
+    if (!isMinimized && prevIsMinimized.current) {
+      setUnreadCount(0);
+    }
+    prevChatLength.current = gameState.chat.length;
+    prevIsMinimized.current = isMinimized;
+  }, [gameState?.chat.length, isMinimized, currentPlayerUuid]);
+
+  // Scroll chat container to bottom when new messages arrive and chat is open
+  useEffect(() => {
+    if (!isMinimized && messagesEndRef.current && gameState) {
+      // Only scroll if the latest message is not a system message
+      const lastMsg = gameState.chat[gameState.chat.length - 1];
+      if (lastMsg && lastMsg.playerId !== "") {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [gameState?.chat.length, isMinimized]);
 
   const handleSendMessage = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -36,19 +61,19 @@ const Chat: React.FC<ChatProps> = ({ isMinimized, onToggleMinimize }) => {
   if (!gameState) return null;
 
   return (
-    <div className={`bg-white rounded-xl shadow-lg transition-all duration-300 ${
+    <div className={`bg-white rounded-3xl shadow-lg transition-all duration-300 ${
       isMinimized ? 'h-12' : 'h-80'
     } w-full min-w-[250px]`}>
       <div
-        className="flex items-center justify-between p-3 bg-blue-500 text-white rounded-t-xl cursor-pointer"
+        className="flex items-center justify-between p-3 bg-blue-500 text-white rounded-t-3xl cursor-pointer"
         onClick={onToggleMinimize}
       >
         <div className="flex items-center space-x-2">
           <span>💬</span>
           <span className="font-medium">Chat</span>
-          {gameState.chat.length > 0 && (
+          {unreadCount > 0 && (
             <span className="bg-blue-400 text-xs px-2 py-1 rounded-full">
-              {gameState.chat.length}
+              {unreadCount}
             </span>
           )}
         </div>

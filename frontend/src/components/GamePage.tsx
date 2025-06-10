@@ -2,12 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { Player, Card, GameState } from '../types';
 import Chat from './Chat';
-import { getCardPath } from '../common';
-import type { CardImage } from '../types';
+import { renderCardImage } from '../common';
 import { PreferencesModal } from './PreferencesModal';
-
-const maxCardHeight = 125;
-
 
 interface GamePageProps {
   onPageChange: (page: 'landing' | 'lobby' | 'game') => void;
@@ -19,7 +15,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
   const [isPreferencesOpen, setIsPreferencesOpen] = useState<boolean>(false);
   const [cardStyle, setCardStyle] = useState<string>("napoli");
 
-  // Highlight round results for 1s after all players have played
+  // Highlight round results after all players have played
   const [showRoundResults, setShowRoundResults] = useState(false);
 
   useEffect(() => {
@@ -116,32 +112,6 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
       window.dispatchEvent(new Event("clearGameState"));
     }
     onPageChange('lobby');
-  };
-
-  // Render a card image using the preferred style
-  const renderCardImage = (card: Card, alt?: string, maxHeight?: number) => {
-    let cardImg: CardImage;
-    try {
-      cardImg = getCardPath(card, cardStyle);
-    } catch {
-      return <span>?</span>;
-    }
-    const base = import.meta.env.VITE_CARD_IMAGE_BASE || "";
-    const src = `${base}/res/${cardImg.src}`;
-    return (
-      <img
-        src={src}
-        alt={alt || `${card.number}${card.suit}`}
-        style={{
-          maxHeight: maxHeight ? `${maxHeight}px` : "100px",
-          height: "auto",
-          width: "auto",
-          display: "inline-block",
-          objectFit: "contain",
-        }}
-        draggable={false}
-      />
-    );
   };
 
   const getCardValue = (card: Card, gameState: GameState | null): number => {
@@ -253,19 +223,16 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                   <p className="text-lg font-medium text-blue-800">
                     Round {gameState?.currentRound ?? '-'}
                   </p>
-                  <p className="text-sm text-blue-600">
-                    First to {gameState?.pointsToWin ?? '-'} points wins!
-                  </p>
                   <p className="text-sm text-gray-700 mt-1">
                     <span className="font-semibold">Deck:</span> {gameState?.deck ? gameState.deck.length : 0} cards left
                   </p>
                 </div>
                 {/* Last Card Reveal */}
-                {gameState?.lastCard && (
+                {((gameState?.deck?.length ?? 0) > 0) && gameState?.lastCard && (
                   <div className="mt-4 flex flex-col items-center">
                     <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Last Card</div>
                     <div className="inline-block bg-yellow-100 border-2 border-yellow-400 rounded-xl px-6 py-3 shadow text-3xl font-bold text-yellow-800">
-                      {renderCardImage(gameState.lastCard, undefined, maxCardHeight)}
+                      {renderCardImage(gameState.lastCard, cardStyle)}
                     </div>
                   </div>
                 )}
@@ -292,7 +259,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                             <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs">YOU</span>
                           )}
                         </div>
-                        <div className="flex justify-center items-center text-4xl mt-2">{renderCardImage(pc.card, undefined, maxCardHeight)}</div>
+                        <div className="flex justify-center items-center text-4xl mt-2">{renderCardImage(pc.card, cardStyle)}</div>
                         <div className="text-sm text-gray-600 mt-1">Value: {getCardValue(pc.card, gameState)}</div>
                       </div>
                     );
@@ -332,7 +299,7 @@ const GamePage: React.FC<GamePageProps> = ({ onPageChange }) => {
                             }`}
                           style={{ minWidth: 0, minHeight: 0 }}
                         >
-                          {renderCardImage(card, undefined, maxCardHeight)}
+                          {renderCardImage(card, cardStyle)}
                         </button>
                       ))}
                     </div>

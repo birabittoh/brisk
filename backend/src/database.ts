@@ -10,9 +10,7 @@ export class Database {
   }
 
   async saveGame(gameState: GameState): Promise<void> {
-    // Store the entire game state under a key based on lobby code
     await this.keyv.set(`game:${gameState.lobbyCode}`, gameState);
-    // Store players as part of the gameState object
   }
 
   async loadGame(lobbyCode: string): Promise<GameState | null> {
@@ -41,10 +39,5 @@ export class Database {
       await this.keyv.delete(`game:${lobbyCode}`);
     }
     await this.keyv.delete(`chat:${gameId}`);
-  }
-
-  async cleanup(): Promise<void> {
-    // Keyv does not support efficient key scanning or TTL cleanup for sqlite backend.
-    // This method is left as a stub.
   }
 }

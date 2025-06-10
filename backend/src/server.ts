@@ -1,11 +1,11 @@
 import express from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { Database } from './database';
 import { GameManager } from './gameManager';
-import { SocketEvents } from './types';
+import { GameState, SocketEvents, speedOptions } from './types';
 
 const app = express();
 const server = createServer(app);
@@ -45,6 +45,42 @@ const sendSystemMessage = async (lobbyCode: string, message: string): Promise<bo
   const chatMessage = await gameManager.sendMessage(lobbyCode, "", message, true);
   return io.to(lobbyCode).emit('message-received', chatMessage);
 }
+
+const findPlayerAndGame = (
+    socket: Socket
+): { playerId: string; lobbyCode: string; foundGame: GameState } => {
+    const playerId = gameManager.getPlayerBySocket(socket.id);
+    if (!playerId) {
+        socket.emit("error", "Player not found");
+        throw new Error("Player not found");
+    }
+
+    let foundGame: GameState | undefined;
+    // Find lobby code for this player
+    let lobbyCode: string | undefined;
+    const rooms = Array.from(socket.rooms);
+    for (const room of rooms) {
+        if (room !== socket.id) {
+            const game = gameManager.getGame(room);
+            if (game && game.players.some((p) => p.id === playerId)) {
+                foundGame = game;
+                lobbyCode = room;
+                break;
+            }
+        }
+    }
+
+    if (!lobbyCode) {
+        socket.emit("error", "Lobby not found");
+        throw new Error("Lobby not found");
+    }
+    if (!foundGame) {
+        socket.emit("error", "Game not found");
+        throw new Error("Game not found");
+    }
+
+    return { playerId, lobbyCode, foundGame };
+};
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -289,6 +325,59 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('change-max-players', async (maxPlayers) => {
+    try {
+      const { playerId, lobbyCode, foundGame } = findPlayerAndGame(socket);
+      const player = foundGame.players.find(p => p.id === playerId);
+
+      if (!player?.isHost) {
+        socket.emit('error', 'Only the host can change max players');
+        return;
+      }
+      if (foundGame.gamePhase !== 'lobby') {
+        socket.emit('error', 'Cannot change max players during game');
+        return;
+      }
+      if (maxPlayers < foundGame.players.length) {
+        socket.emit('error', 'Cannot set max players less than current player count');
+        return;
+      }
+
+      foundGame.maxPlayers = maxPlayers;
+      await db.saveGame(foundGame);
+      io.to(lobbyCode).emit('game-updated', foundGame);
+    } catch (error) {
+      socket.emit('error', error instanceof Error ? error.message : 'Failed to update max players');
+    }
+  });
+
+  socket.on('change-speed', async (speed) => {
+    try {
+      const { playerId, lobbyCode, foundGame } = findPlayerAndGame(socket);
+      const player = foundGame.players.find(p => p.id === playerId);
+
+      if (!player?.isHost) {
+        socket.emit('error', 'Only the host can change game speed');
+        return;
+      }
+      if (foundGame.gamePhase !== 'lobby') {
+        socket.emit('error', 'Cannot change game speed during game');
+        return;
+      }
+
+      if (!speedOptions.includes(speed)) {
+        socket.emit('error', 'Bad speed value');
+        return;
+      }
+
+      foundGame.speed = speed;
+      await db.saveGame(foundGame);
+      io.to(lobbyCode).emit('game-updated', foundGame);
+    } catch (error) {
+      socket.emit('error', error instanceof Error ? error.message : 'Failed to update max players');
+    }
+  });
+
   socket.on('disconnect', async () => {
     // Get player name before leaving
     const playerId = gameManager.getPlayerBySocket(socket.id);
@@ -330,11 +419,6 @@ io.on('connection', (socket) => {
     }
   });
 });
-
-// Cleanup routine
-setInterval(async () => {
-  await gameManager.cleanup();
-}, 60 * 60 * 1000); // Run every hour
 
 const PORT = process.env.PORT || 5000;
 

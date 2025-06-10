@@ -27,8 +27,6 @@ services:
     networks:
       - brisk-network
     restart: unless-stopped
-    env_file:
-      - ./frontend/.env
 
 volumes:
   sqlite_data:

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { Player } from '../types';
+import { Player, SpeedOption, speedOptions } from '../types';
 import Chat from './Chat';
+import { PreferencesModal } from './PreferencesModal';
 
 interface LobbyPageProps {
   onPageChange: (page: 'landing' | 'lobby' | 'game') => void;
@@ -10,14 +11,14 @@ interface LobbyPageProps {
 const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
   const { socket, gameState, currentPlayerId, currentPlayerUuid } = useSocket();
   const [isChatMinimized, setIsChatMinimized] = useState<boolean>(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState<boolean>(false);
+  const [cardStyle, setCardStyle] = useState<string>(localStorage.getItem('cardStyle') || 'napoli');
 
   React.useEffect(() => {
     if (!socket) return;
     const handleGameStarted = (): void => {
       onPageChange('game');
     };
-
-    socket.on('game-started', handleGameStarted);
 
     return () => {
       socket.off('game-started', handleGameStarted);
@@ -73,6 +74,20 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
     }, 1000);
     
     button.dataset.timeoutId = timeoutId.toString();
+  };
+
+  const handleChangePlayers = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const newMaxPlayers = parseInt(e.target.value, 10);
+    if (newMaxPlayers >= 2 && newMaxPlayers <= 5 && newMaxPlayers >= (gameState?.players?.length || 0)) {
+      socket.emit('change-max-players', newMaxPlayers);
+    }
+  };
+
+  const handleChangeSpeed = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    const speed = e.target.value as SpeedOption;
+    if (speedOptions.includes(speed)) {
+      socket.emit('change-speed', speed);
+    }
   };
 
   return (
@@ -164,14 +179,77 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
               </div>
             </div>
           </div>
-          {/* Chat Sidebar */}
-          <div className="lg:col-span-1">
+          {/* Side Containers: Settings (top) + Chat (bottom) */}
+          <div className="lg:col-span-1 flex flex-col gap-4">
+            {/* Settings Container */}
+            <div className="bg-white rounded-3xl shadow-2xl p-6 mb-0">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">Settings</h2>
+              <div className="flex flex-col gap-4">
+                {/* Teams Toggle */}
+                <div className="flex items-center justify-between">
+                  <label htmlFor="teams-toggle" className="font-medium text-gray-700">Teams</label>
+                  <input
+                    id="teams-toggle"
+                    type="checkbox"
+                    className="toggle-checkbox h-5 w-5"
+                    disabled={!isHost}
+                  />
+                </div>
+                {/* Speed Dropdown */}
+                <div className="flex items-center justify-between">
+                  <label htmlFor="speed-select" className="font-medium text-gray-700">Speed</label>
+                  <select
+                    id="speed-select"
+                    className="border rounded-lg px-2 py-1"
+                    disabled={!isHost}
+                    value={gameState?.speed ?? '-'}
+                    onChange={handleChangeSpeed}
+                  >
+                    {speedOptions.map((speed) => (
+                      <option key={speed} value={speed}>
+                        {speed.charAt(0).toUpperCase() + speed.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Players Number Input */}
+                <div className="flex items-center justify-between">
+                  <label htmlFor="players-input" className="font-medium text-gray-700">Max players</label>
+                  <input
+                    id="players-input"
+                    type="number"
+                    min={2}
+                    max={5}
+                    className="border rounded-lg px-2 py-1 w-20"
+                    disabled={!isHost}
+                    value={gameState?.maxPlayers ?? 5}
+                    onChange={handleChangePlayers}
+                  />
+                </div>
+              </div>
+            </div>
+            {/* Chat Container */}
             <Chat
               isMinimized={isChatMinimized}
               onToggleMinimize={() => setIsChatMinimized(!isChatMinimized)}
             />
           </div>
         </div>
+        {/* Preferences Button and Modal */}
+        <div className="mt-6 text-center flex justify-center">
+          <button
+            onClick={() => setIsPreferencesOpen(true)}
+            className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-gray-600 hover:to-gray-700 transition-all transform hover:scale-105"
+          >
+            ⚙️ Preferences
+          </button>
+        </div>
+        <PreferencesModal
+          playerId={currentPlayerUuid ?? ""}
+          isOpen={isPreferencesOpen}
+          onClose={() => setIsPreferencesOpen(false)}
+          onCardStyleChange={setCardStyle}
+        />
       </div>
     </div>
   );

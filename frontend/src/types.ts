@@ -11,12 +11,6 @@ export interface Card {
   suit: Suit;
 }
 
-export interface CardImage {
-  src: string;
-  card: Card;
-  style: Style;
-}
-
 export interface Player {
   id: string;
   name: string;
@@ -43,7 +37,7 @@ export interface GameState {
   currentPlayerIndex: number;
   gamePhase: 'lobby' | 'playing' | 'ended';
   maxPlayers: number;
-  pointsToWin: number;
+  speed: SpeedOption;
   chat: ChatMessage[];
   winner?: Player;
   currentRound: number;
@@ -59,6 +53,9 @@ export interface LobbyCreatedPayload {
   playerUuid: string;
 }
 
+export type SpeedOption = 'slower' | 'slow' | 'normal' | 'fast' | 'extreme';
+export const speedOptions: SpeedOption[] = ['slower', 'slow', 'normal', 'fast', 'extreme'];
+
 export interface SocketEvents {
   // Client to Server
   'join-lobby': (data: { lobbyCode: string; playerName: string }) => void;
@@ -68,6 +65,8 @@ export interface SocketEvents {
   'kick-player': (playerId: string) => void;
   'leave-lobby': () => void;
   'send-message': (message: string) => void;
+  'change-max-players': (maxPlayers: number) => void;
+  'change-speed': (speed: SpeedOption) => void;
   
   // Server to Client
   'lobby-joined': (payload: LobbyCreatedPayload) => void;

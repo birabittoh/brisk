@@ -30,7 +30,7 @@ export interface GameState {
   currentPlayerIndex: number;
   gamePhase: 'lobby' | 'playing' | 'ended';
   maxPlayers: number;
-  pointsToWin: number;
+  speed: SpeedOption; // type derived from speedOptions in utils.ts
   chat: ChatMessage[];
   winner?: Player;
   currentRound: number;
@@ -43,6 +43,18 @@ export interface GameState {
   turnEndTimestamp?: number; // Unix ms timestamp when the current turn ends
 }
 
+export type SpeedOption = 'slower' | 'slow' | 'normal' | 'fast' | 'extreme';
+
+export const speedMap: Record<string, number> = {
+  slower: 60000,
+  slow: 40000,
+  normal: 30000,
+  fast: 15000,
+  extreme: 5000,
+};
+
+export const speedOptions: SpeedOption[] = Object.keys(speedMap) as SpeedOption[];
+
 export interface SocketEvents {
   // Client to Server
   'join-lobby': (data: { lobbyCode: string; playerName: string }) => void;
@@ -52,6 +64,8 @@ export interface SocketEvents {
   'kick-player': (playerId: string) => void;
   'leave-lobby': () => void;
   'send-message': (message: string) => void;
+  'change-max-players': (maxPlayers: number) => void;
+  'change-speed': (speed: SpeedOption) => void;
   
   // Server to Client
   'lobby-joined': (data: { gameState: GameState; playerUuid: string }) => void;
