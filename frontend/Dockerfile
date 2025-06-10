@@ -7,10 +7,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY tsconfig.json vite.config.ts tailwind.config.js ./
-COPY src ./src
 COPY public ./public
 COPY index.html ./
 COPY .env ./
+COPY src ./src
 RUN npm run build
 
 # Stage 2: Serve with nginx
