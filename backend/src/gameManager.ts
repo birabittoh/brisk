@@ -216,7 +216,7 @@ export class GameManager extends EventEmitter {
 
   private validateJoinConditions(gameState: GameState, lobbyCode: string, playerName: string): Player | undefined {
     this.cleanupExpiredKicks(lobbyCode);
-    
+
     const kickStatus = this.isPlayerKicked(lobbyCode, playerName);
     if (kickStatus.isKicked) {
       const error: any = new Error('You have been kicked. Please wait before rejoining.');
@@ -225,7 +225,10 @@ export class GameManager extends EventEmitter {
       throw error;
     }
 
-    if (gameState.players.length >= gameState.maxPlayers) {
+    const reconnectableAI = this.findReconnectableAI(gameState, playerName);
+
+    // Only enforce maxPlayers if there is no reconnectable AI for this player
+    if (!reconnectableAI && gameState.players.length >= gameState.maxPlayers) {
       throw new Error('Lobby is full');
     }
 
@@ -233,7 +236,6 @@ export class GameManager extends EventEmitter {
       throw new Error('This player has already joined the lobby');
     }
 
-    const reconnectableAI = this.findReconnectableAI(gameState, playerName);
     if (gameState.gamePhase === 'playing' && !reconnectableAI) {
       throw new Error('Game already started, cannot join now');
     }

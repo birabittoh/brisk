@@ -1,4 +1,6 @@
 export type Suit = 'a' | 'b' | 'c' | 'd';
+export type Team = 'red' | 'blue';
+export type SpeedOption = 'slower' | 'slow' | 'normal' | 'fast' | 'extreme';
 
 export interface Card {
   number: number; // 1-10
@@ -13,6 +15,7 @@ export interface Player {
   score: number;
   hand?: Card[];
   wonCards?: Card[];
+  team?: Team;
 }
 
 export interface ChatMessage {
@@ -30,7 +33,7 @@ export interface GameState {
   currentPlayerIndex: number;
   gamePhase: 'lobby' | 'playing' | 'ended';
   maxPlayers: number;
-  speed: SpeedOption; // type derived from speedOptions in utils.ts
+  speed: SpeedOption;
   chat: ChatMessage[];
   winner?: Player;
   currentRound: number;
@@ -42,8 +45,6 @@ export interface GameState {
   turnStartTimestamp?: number; // Unix ms timestamp when the current turn started
   turnEndTimestamp?: number; // Unix ms timestamp when the current turn ends
 }
-
-export type SpeedOption = 'slower' | 'slow' | 'normal' | 'fast' | 'extreme';
 
 export const speedMap: Record<string, number> = {
   slower: 60000,

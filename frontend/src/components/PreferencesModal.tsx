@@ -1,7 +1,7 @@
 // PreferencesModal.tsx
 import React, { useEffect, useState } from "react";
 import styles from "../styles.json";
-import { renderCardImage, suitMap } from "../common";
+import { cardBacks, renderCardBack, renderCardImage, suitMap } from "../common";
 import { Suit } from "../types";
 
 const styleNames = styles.map((s) => s.name);
@@ -11,6 +11,7 @@ interface PreferencesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCardStyleChange?: (style: string) => void;
+  onBackStyleChange?: (index: number) => void;
 }
 
 export const PreferencesModal: React.FC<PreferencesModalProps> = ({
@@ -18,14 +19,20 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
   isOpen,
   onClose,
   onCardStyleChange,
+  onBackStyleChange,
 }) => {
   const [selectedStyle, setSelectedStyle] = useState<string>(styleNames[0]);
+  const [selectedBack, setSelectedBack] = useState<number>(0);
 
   useEffect(() => {
     if (playerId) {
       const saved = localStorage.getItem('cardStyle');
       if (saved && styleNames.includes(saved)) {
         setSelectedStyle(saved);
+      }
+      const savedBack = localStorage.getItem('cardBack');
+      if (savedBack && !isNaN(Number(savedBack))) {
+        setSelectedBack(Number(savedBack));
       }
     }
   }, [playerId, isOpen]);
@@ -35,6 +42,12 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
     setSelectedStyle(value);
     localStorage.setItem('cardStyle', value);
     if (onCardStyleChange) onCardStyleChange(value);
+  };
+
+  const handleBackClick = (idx: number) => {
+    setSelectedBack(idx);
+    localStorage.setItem('cardBack', String(idx));
+    if (onBackStyleChange) onBackStyleChange(idx);
   };
 
   if (!isOpen) return null;
@@ -57,7 +70,7 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
             className="border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500"
           >
             {styleNames.map((style) => (
-              <option key={style} value={style}>
+              style !== 'backs' && <option key={style} value={style}>
                 {style.charAt(0).toUpperCase() + style.slice(1)}
               </option>
             ))}
@@ -73,6 +86,28 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
               ),
               { key: suit }
             )
+          )}
+        </div>
+        <span>Card back:</span>
+        <div className="flex flex-wrap justify-center gap-2 mb-4 overflow-x-auto">
+          {cardBacks.map((c, idx) =>
+            <div
+              key={c.number}
+              onClick={() => handleBackClick(idx)}
+              className="cursor-pointer rounded"
+              style={{
+                display: "inline-block",
+                filter: selectedBack === idx ? "none" : "grayscale(100%)"
+              }}
+            >
+              {React.cloneElement(
+                renderCardBack(
+                  idx,
+                  "min-h-[125px] h-[125px] w-auto md:h-40 lg:h-56 object-contain rounded shadow"
+                ),
+                { draggable: false }
+              )}
+            </div>
           )}
         </div>
         <div className="flex justify-end mt-6">

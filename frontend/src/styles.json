@@ -1,5 +1,10 @@
 [
     {
+        "name":  "backs",
+        "width":  368,
+        "height":  576
+    },
+    {
         "name":  "bergamo",
         "width":  320,
         "height":  576

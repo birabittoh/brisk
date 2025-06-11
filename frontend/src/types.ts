@@ -1,5 +1,14 @@
 export type Suit = 'a' | 'b' | 'c' | 'd';
 
+export type Positions = {
+    A: Player | null;
+    B: Player | null;
+    C: Player | null;
+    D: Player | null;
+    E: Player | null;
+    F: Player | null;
+  }
+
 export interface Style {
   name: string;
   width: number;

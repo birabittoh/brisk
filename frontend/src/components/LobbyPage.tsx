@@ -10,7 +10,7 @@ interface LobbyPageProps {
 }
 
 const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
-  const { socket, gameState, currentPlayerId, currentPlayerUuid } = useSocket();
+  const { socket, gameState, currentPlayerId, currentPlayerUuid, error } = useSocket();
   const [isChatMinimized, setIsChatMinimized] = useState<boolean>(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState<boolean>(false);
   const [cardStyle, setCardStyle] = useState<string>(localStorage.getItem('cardStyle') || 'napoli');
@@ -20,6 +20,7 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
     const handleGameStarted = (): void => {
       onPageChange('game');
     };
+    socket.on('game-started', handleGameStarted);
 
     return () => {
       socket.off('game-started', handleGameStarted);
@@ -93,6 +94,13 @@ const LobbyPage: React.FC<LobbyPageProps> = ({ onPageChange }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 p-4">
+      {error && (
+        <div className="max-w-2xl mx-auto mb-4">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-center" role="alert">
+            <span className="block sm:inline">{error}</span>
+          </div>
+        </div>
+      )}
       <div className="max-w-4xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
